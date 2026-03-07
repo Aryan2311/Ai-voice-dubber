@@ -9,4 +9,5 @@
 /worker/__pycache__/
 /worker/**/__pycache__/
 *.py[cod]
+/worker/.env
 /worker/.venv/

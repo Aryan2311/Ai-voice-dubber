@@ -17,4 +17,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY worker/ /app/worker/
 
 ENV PYTHONPATH=/app
-CMD ["python", "worker/worker.py"]
+# Run as module so "worker" is the package (worker/), not the script file (worker.py)
+CMD ["python", "-m", "worker.worker"]
