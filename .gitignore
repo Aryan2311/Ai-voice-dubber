@@ -1,0 +1,12 @@
+# Only worker/ and .github/ are tracked; everything else is ignored.
+# If other folders were already committed, run once: git rm -r --cached .  then  git add .  then  git commit
+/*
+!/.gitignore
+!/worker
+!/.github
+
+# Inside worker: ignore Python/IDE junk
+/worker/__pycache__/
+/worker/**/__pycache__/
+*.py[cod]
+/worker/.venv/

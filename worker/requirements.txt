@@ -1,0 +1,9 @@
+# Worker: run on EC2 GPU (g5.xlarge recommended)
+torch
+transformers
+boto3
+ffmpeg-python
+TTS
+openai-whisper
+librosa
+pydub

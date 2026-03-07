@@ -1,0 +1,38 @@
+# Build worker image in the cloud and push to Docker Hub. No 30+ min local build.
+# Add repo secrets: DOCKERHUB_USERNAME (e.g. aryan2311), DOCKERHUB_TOKEN (Docker Hub → Account → Security → Access Tokens).
+name: Build and push worker image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/build-worker-image.yml'
+  workflow_dispatch:  # Run manually from Actions tab
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./worker/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/ai-dubbing-worker:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/ai-dubbing-worker:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
