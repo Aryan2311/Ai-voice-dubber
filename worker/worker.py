@@ -16,6 +16,7 @@ from botocore.config import Config
 from worker.jobs import transcribe_job, translate_job, subtitle_job, tts_job, dub_job
 from worker.gpu import gpu_session
 from worker.scheduler import add_job, get_job
+from worker.utils import s3_utils
 
 # Clear format for docker logs: UTC timestamp, level, name, message
 logging.Formatter.converter = time.gmtime
@@ -156,6 +157,19 @@ def processor_loop(sqs, queue_url):
             except Exception as e:
                 elapsed = time.monotonic() - started
                 logger.exception("Failed job_type=%s job_id=%s elapsed_sec=%.1f error=%s", job_type, job_id, elapsed, e)
+                # Record failure in S3 so backend/UI can show failed status
+                sid = job.get("job_id")
+                if sid:
+                    try:
+                        key = f"job_failures/{sid}.json"
+                        s3_utils.upload_bytes(
+                            json.dumps({"status": "failed", "error": str(e)}).encode("utf-8"),
+                            key,
+                            content_type="application/json",
+                        )
+                        logger.info("Written job failure to s3 key=%s", key)
+                    except Exception as s3_err:
+                        logger.warning("Could not write job failure to S3: %s", s3_err)
         except Exception as e:
             logger.exception("Processor error: %s", e)
             time.sleep(5)

@@ -3,6 +3,7 @@ torch
 # Pin transformers: Coqui TTS/XTTS needs BeamSearchScorer (removed in 4.46+)
 transformers>=4.30,<4.46
 sentencepiece
+sacremoses
 boto3
 ffmpeg-python
 TTS

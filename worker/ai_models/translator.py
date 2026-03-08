@@ -28,6 +28,8 @@ def load_translation_model(source_lang: str = "en", target_lang: str = "es"):
 
 
 def translate_text(text: str, source_lang: str = "en", target_lang: str = "es") -> str:
+    if (source_lang or "en").lower() == (target_lang or "en").lower():
+        return text
     tokenizer, model = load_translation_model(source_lang, target_lang)
     inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512)
     outputs = model.generate(**inputs)
@@ -35,7 +37,14 @@ def translate_text(text: str, source_lang: str = "en", target_lang: str = "es") 
 
 
 def translate_segments(segments: List[Dict], source_lang: str = "en", target_lang: str = "es") -> List[Dict]:
-    """Translate each segment text. Preserve start/end."""
+    """Translate each segment text. Preserve start/end. If source==target, return segments as-is (no opus-mt-en-en)."""
+    src = (source_lang or "en").lower()
+    tgt = (target_lang or "en").lower()
+    if src == tgt:
+        return [
+            {"start": s["start"], "end": s["end"], "text": s.get("text", ""), "original_text": s.get("text", "")}
+            for s in segments
+        ]
     result = []
     for s in segments:
         result.append({
