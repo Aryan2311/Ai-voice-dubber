@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 _xtts_model = None
 _xtts_speaker_wav = None
 
-# XTTS allows max 400 tokens; ~2–3 chars per token for many languages → safe chunk size
-MAX_CHARS_PER_TTS_CALL = 800
+# XTTS allows max 400 tokens. Hindi/Devanagari can be ~1–2 tokens per char; keep chunks small.
+MAX_CHARS_PER_TTS_CALL = 250
 
 
 def _split_text_for_xtts(text: str) -> list:
