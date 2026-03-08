@@ -1,6 +1,7 @@
 # Worker: run on EC2 GPU (g5.xlarge recommended)
 torch
 transformers
+sentencepiece
 boto3
 ffmpeg-python
 TTS
