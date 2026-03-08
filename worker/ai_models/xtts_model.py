@@ -13,6 +13,8 @@ def load_xtts():
     global _xtts_model
     if _xtts_model is not None:
         return _xtts_model
+    # Accept Coqui CPML non-commercial terms so XTTS loads in non-interactive environments (Docker, CI).
+    os.environ.setdefault("COQUI_TOS_AGREED", "1")
     try:
         from TTS.api import TTS
         # XTTS v2 model
