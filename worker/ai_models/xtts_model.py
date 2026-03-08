@@ -1,13 +1,31 @@
 """
 XTTS v2: load once at worker startup, generate speech from text (optionally with voice clone).
 XTTS has a 400-token limit per call; long text is split into chunks and audio concatenated.
+Coqui TTS prints "Text splitted to sentences" / "Processing time" / "Real-time factor" per call;
+we suppress that so our logs show clearly that time is in voice generation.
 """
+import contextlib
 import logging
 import os
+import sys
 import tempfile
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+@contextlib.contextmanager
+def _quiet_tts_stdout():
+    """Temporarily suppress stdout/stderr so Coqui's per-sentence prints don't flood logs."""
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    try:
+        sys.stdout = open(os.devnull, "w")
+        sys.stderr = open(os.devnull, "w")
+        yield
+    finally:
+        sys.stdout.close()
+        sys.stderr.close()
+        sys.stdout, sys.stderr = old_stdout, old_stderr
 
 _xtts_model = None
 _xtts_speaker_wav = None
@@ -65,16 +83,17 @@ def load_xtts():
 
 
 def _tts_one_chunk(model, text: str, path: str, language: str, speaker_wav_path: str = None) -> None:
-    """Generate speech for a single chunk (under token limit)."""
-    if speaker_wav_path and os.path.isfile(speaker_wav_path):
-        model.tts_to_file(
-            text=text,
-            file_path=path,
-            speaker_wav=speaker_wav_path,
-            language=language,
-        )
-    else:
-        model.tts_to_file(text=text, file_path=path, language=language)
+    """Generate speech for a single chunk (under token limit). Suppress Coqui's verbose prints."""
+    with _quiet_tts_stdout():
+        if speaker_wav_path and os.path.isfile(speaker_wav_path):
+            model.tts_to_file(
+                text=text,
+                file_path=path,
+                speaker_wav=speaker_wav_path,
+                language=language,
+            )
+        else:
+            model.tts_to_file(text=text, file_path=path, language=language)
 
 
 def generate_speech(

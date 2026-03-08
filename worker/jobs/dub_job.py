@@ -82,20 +82,36 @@ def run_dub_job(job: dict) -> None:
             return
 
         translated = translator.translate_segments(segments, source_lang, language)
+        # Get total duration from source so timeline matches video/audio length
+        if is_video:
+            video_key = s3_utils.list_keys(f"uploads/media/{media_id}/")[0]
+            video_path = os.path.join(tmp, "video" + os.path.splitext(video_key)[1])
+            s3_utils.download_file(video_key, video_path)
+            total_duration_sec = ffmpeg_utils.get_audio_duration_seconds(video_path)
+        else:
+            source_wav = os.path.join(tmp, "source.wav")
+            s3_utils.download_file(f"audio/{media_id}/source.wav", source_wav)
+            total_duration_sec = ffmpeg_utils.get_audio_duration_seconds(source_wav)
+        total_duration_sec = max(total_duration_sec, max((s["end"] for s in translated), default=0.0) + 0.5)
+
         speaker_wav = None
         if voice_sample_s3:
             speaker_wav = s3_utils.download_to_temp(voice_sample_s3, suffix=".wav")
 
         segment_wavs = []
+        n_seg = len(translated)
         for i, seg in enumerate(translated):
             seg_wav = os.path.join(tmp, "seg_%d.wav" % i)
+            logger.info("TTS segment %d/%d (generating voice)", i + 1, n_seg)
             xtts_model.generate_speech(
                 seg["text"], seg_wav, language=language, speaker_wav_path=speaker_wav
             )
             segment_wavs.append(seg_wav)
 
+        # Place each TTS clip at its segment start and time-stretch to fit (end - start)
+        segment_timeline = [(s["start"], s["end"], segment_wavs[i]) for i, s in enumerate(translated)]
         dubbed_audio_path = os.path.join(tmp, "dubbed.wav")
-        audio_utils.concat_wav_files(segment_wavs, dubbed_audio_path)
+        audio_utils.build_timeline_wav(segment_timeline, total_duration_sec, dubbed_audio_path)
 
         if speaker_wav and rvc_model.load_rvc():
             rvc_path = os.path.join(tmp, "dubbed_rvc.wav")
@@ -103,9 +119,7 @@ def run_dub_job(job: dict) -> None:
                 dubbed_audio_path = rvc_path
 
         if is_video:
-            video_key = s3_utils.list_keys(f"uploads/media/{media_id}/")[0]
-            video_path = os.path.join(tmp, "video" + os.path.splitext(video_key)[1])
-            s3_utils.download_file(video_key, video_path)
+            # video_path already downloaded when we got total_duration_sec
             output_path = os.path.join(tmp, "output.mp4")
             ffmpeg_utils.merge_audio_with_video(video_path, dubbed_audio_path, output_path)
             out_key = f"dubbed/{media_id}/{language}.mp4"
