@@ -152,7 +152,6 @@ def processor_loop(sqs, queue_url):
                 else:
                     handle_job(job)
                 elapsed = time.monotonic() - started
-                sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
                 logger.info("Completed job_type=%s job_id=%s elapsed_sec=%.1f", job_type, job_id, elapsed)
             except Exception as e:
                 elapsed = time.monotonic() - started
@@ -170,6 +169,12 @@ def processor_loop(sqs, queue_url):
                         logger.info("Written job failure to s3 key=%s", key)
                     except Exception as s3_err:
                         logger.warning("Could not write job failure to S3: %s", s3_err)
+            finally:
+                # Always remove from queue once processed (success or failure) so the same job is never redelivered
+                try:
+                    sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+                except Exception as del_err:
+                    logger.warning("Failed to delete SQS message job_id=%s: %s", job_id, del_err)
         except Exception as e:
             logger.exception("Processor error: %s", e)
             time.sleep(5)

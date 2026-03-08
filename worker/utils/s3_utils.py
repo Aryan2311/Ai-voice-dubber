@@ -71,3 +71,12 @@ def object_exists(s3_key: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def object_exists_and_non_empty(s3_key: str, min_size: int = 1024) -> bool:
+    """True only if object exists and has at least min_size bytes (avoids treating empty/corrupt as done)."""
+    try:
+        resp = get_s3_client().head_object(Bucket=get_bucket(), Key=s3_key)
+        return (resp.get("ContentLength") or 0) >= min_size
+    except Exception:
+        return False

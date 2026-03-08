@@ -50,6 +50,17 @@ def run_dub_job(job: dict) -> None:
     is_video = _media_is_video(media_id)
     logger.info("DUB_MEDIA media_id=%s language=%s is_video=%s", media_id, language, is_video)
 
+    # Idempotent: skip only when a real output exists (non-empty; avoid skipping on empty/corrupt leftover)
+    if is_video:
+        out_key = f"dubbed/{media_id}/{language}.mp4"
+        min_size = 1024
+    else:
+        out_key = f"audio/{media_id}/{language}.wav"
+        min_size = 256
+    if s3_utils.object_exists_and_non_empty(out_key, min_size=min_size):
+        logger.info("DUB_MEDIA media_id=%s language=%s output already exists, skipping", media_id, language)
+        return
+
     with tempfile.TemporaryDirectory() as tmp:
         orig = _ensure_original_transcript(media_id, tmp)
         segments = orig.get("segments", [])
@@ -98,9 +109,13 @@ def run_dub_job(job: dict) -> None:
             output_path = os.path.join(tmp, "output.mp4")
             ffmpeg_utils.merge_audio_with_video(video_path, dubbed_audio_path, output_path)
             out_key = f"dubbed/{media_id}/{language}.mp4"
+            if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                raise RuntimeError("Merge produced no output file or empty file: %s" % output_path)
             s3_utils.upload_file(output_path, out_key, content_type="video/mp4")
             logger.info("DUB_MEDIA media_id=%s uploaded key=%s segments=%d", media_id, out_key, len(segments))
         else:
             out_key = f"audio/{media_id}/{language}.wav"
+            if not os.path.exists(dubbed_audio_path) or os.path.getsize(dubbed_audio_path) == 0:
+                raise RuntimeError("Dubbed audio file missing or empty: %s" % dubbed_audio_path)
             s3_utils.upload_file(dubbed_audio_path, out_key, content_type="audio/wav")
             logger.info("DUB_MEDIA media_id=%s uploaded key=%s segments=%d", media_id, out_key, len(segments))
