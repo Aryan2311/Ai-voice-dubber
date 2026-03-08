@@ -1,8 +1,11 @@
 """
 XTTS v2: load once at worker startup, generate speech from text (optionally with voice clone).
 """
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 _xtts_model = None
 _xtts_speaker_wav = None
@@ -20,8 +23,12 @@ def load_xtts():
         # XTTS v2 model
         _xtts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to("cuda")
         return _xtts_model
-    except ImportError:
-        raise RuntimeError("TTS (Coqui) not installed. pip install TTS")
+    except ImportError as e:
+        logger.exception("XTTS import failed: %s", e)
+        raise RuntimeError("TTS (Coqui) not installed. pip install TTS") from e
+    except Exception as e:
+        logger.exception("XTTS load failed: %s", e)
+        raise
 
 
 def generate_speech(
