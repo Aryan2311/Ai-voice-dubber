@@ -1,5 +1,6 @@
 # GPU worker. Build from repo root: docker build -f worker/Dockerfile .
-FROM pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime
+# PyTorch >= 2.4 required by Coqui TTS (XTTS v2)
+FROM pytorch/pytorch:2.4.1-cuda11.8-cudnn9-runtime
 
 # apt update + ffmpeg (and deps) is a large download; only ffmpeg needed for worker
 ENV DEBIAN_FRONTEND=noninteractive
