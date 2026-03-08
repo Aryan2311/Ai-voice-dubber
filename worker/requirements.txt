@@ -1,6 +1,7 @@
 # Worker: run on EC2 GPU (g5.xlarge recommended)
 torch
-transformers
+# Pin transformers: Coqui TTS/XTTS needs BeamSearchScorer (removed in 4.46+)
+transformers>=4.30,<4.46
 sentencepiece
 boto3
 ffmpeg-python
