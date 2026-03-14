@@ -27,6 +27,7 @@ def _quiet_tts_stdout():
         sys.stderr.close()
         sys.stdout, sys.stderr = old_stdout, old_stderr
 
+
 _xtts_model = None
 _xtts_speaker_wav = None
 

@@ -108,8 +108,20 @@ def run_dub_job(job: dict) -> None:
             )
             segment_wavs.append(seg_wav)
 
-        # Place each TTS clip at its segment start and time-stretch to fit (end - start)
-        segment_timeline = [(s["start"], s["end"], segment_wavs[i]) for i, s in enumerate(translated)]
+        # Normalize segment boundaries: back-to-back (each starts where previous ended). No overlap, no silence.
+        slot_starts = []
+        slot_ends = []
+        for i, s in enumerate(translated):
+            end_sec = s["end"]
+            if i == 0:
+                start_sec = s["start"]
+            else:
+                start_sec = slot_ends[i - 1]
+            if end_sec <= start_sec:
+                end_sec = start_sec + 0.05  # minimum 50ms slot
+            slot_starts.append(start_sec)
+            slot_ends.append(end_sec)
+        segment_timeline = [(slot_starts[i], slot_ends[i], segment_wavs[i]) for i in range(len(translated))]
         dubbed_audio_path = os.path.join(tmp, "dubbed.wav")
         audio_utils.build_timeline_wav(segment_timeline, total_duration_sec, dubbed_audio_path)
 

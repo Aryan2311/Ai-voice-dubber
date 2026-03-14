@@ -88,6 +88,7 @@ def build_timeline_wav(
     """
     Build a single WAV where each segment's audio is placed at its start time and
     time-stretched to fit (end - start). segment_list = [(start_sec, end_sec, wav_path), ...].
+    Caller should pass gapless, non-overlapping (start, end) so there is no silence and no overlap.
     """
     import numpy as np
     import librosa
