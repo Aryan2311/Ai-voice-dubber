@@ -3,11 +3,11 @@ TRANSLATE_TRANSCRIPT: read transcripts/{media_id}/original.json, translate to la
 """
 import json
 import logging
-import tempfile
 import os
+import tempfile
 
 from worker.utils import s3_utils
-from worker.ai_models import translator
+from worker.pipeline import translate as translate_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ def run_translate_job(job: dict) -> None:
 
         source_lang = data.get("language", "en")
         segments = data.get("segments", [])
-        translated = translator.translate_segments(segments, source_lang, language)
+        translated = translate_pipeline.translate_segments(segments, source_lang, language)
         full_text = " ".join(s["text"] for s in translated)
 
         out = {

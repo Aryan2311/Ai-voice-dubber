@@ -1,12 +1,22 @@
-# Worker: run on EC2 GPU (g5.xlarge recommended)
+# Worker: EC2 GPU (g5.xlarge 24GB recommended). No XTTS/MarianMT; NLLB, StyleTTS2, Phi-3, RVC only.
 torch
-# Pin transformers: Coqui TTS/XTTS needs BeamSearchScorer (removed in 4.46+)
-transformers>=4.30,<4.46
+# NLLB + Phi-3 + StyleTTS2 (StyleTTS2 needs >=4.36)
+transformers>=4.36,<4.46
 sentencepiece
 sacremoses
 boto3
 ffmpeg-python
-TTS
 openai-whisper
 librosa
+soundfile
 pydub
+pyphen
+# StyleTTS2 (TTS with prosody/voice clone)
+styletts2
+# RVC voice conversion (needs RVC_MODEL_PATH to a .pth file)
+rvc-python
+# Voice isolation for reference preprocessing (Demucs)
+demucs
+# Optional: reduce CPU memory for Phi-3
+# bitsandbytes
+# accelerate

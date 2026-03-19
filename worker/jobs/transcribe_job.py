@@ -1,12 +1,12 @@
 """
-TRANSCRIBE: ensure source audio exists (preprocess), run Whisper, upload transcripts/{media_id}/original.json
+TRANSCRIBE: ensure source audio exists (preprocess), run ASR (Whisper), upload transcripts/{media_id}/original.json
 """
 import logging
 import os
 import tempfile
 
 from worker.utils import s3_utils, media_preprocess
-from worker.ai_models import whisper_model
+from worker.pipeline import asr
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def run_transcribe_job(job: dict) -> None:
         s3_utils.download_file(f"audio/{media_id}/source.wav", audio_path)
         logger.info("TRANSCRIBE media_id=%s running Whisper", media_id)
 
-        result = whisper_model.transcribe_audio(audio_path)
+        result = asr.transcribe(audio_path)
         transcript = {
             "media_id": media_id,
             "segments": result["segments"],

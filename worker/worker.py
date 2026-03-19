@@ -77,22 +77,26 @@ def handle_job(job: dict) -> None:
 def load_models_once():
     logger.info("Loading AI models (once) at startup...")
     try:
-        from worker.ai_models import whisper_model, xtts_model, rvc_model, translator
-        whisper_model.load_whisper()
+        from worker.models import whisper_loader, nllb_loader, styletts_loader
+        from worker.ai_models import rvc_model
+        whisper_loader.load_whisper()
         logger.info("Whisper loaded.")
-        xtts_model.load_xtts()
-        logger.info("XTTS loaded.")
+        nllb_loader.load_nllb()
+        logger.info("NLLB loaded.")
+        styletts_loader.get_styletts_model()
+        logger.info("StyleTTS2 loaded.")
         rvc_model.load_rvc()
-        logger.info("RVC loaded (or skipped).")
-        translator.load_translation_model("en", "es")
-        logger.info("Translator loaded.")
-        _warmup_models(whisper_model, xtts_model)
+        logger.info("RVC loaded (or skipped if RVC_MODEL_PATH not set).")
+        from worker.models import llm_loader
+        llm_loader.get_llm()
+        logger.info("Rewrite LLM loaded.")
+        _warmup_models(whisper_loader, styletts_loader)
     except Exception as e:
         logger.warning("Some models failed to load: %s", e)
     logger.info("Model loading done.")
 
 
-def _warmup_models(whisper_model, xtts_model):
+def _warmup_models(whisper_loader, styletts_loader):
     """Optional warmup to avoid first-inference delay. Skip if it fails."""
     import tempfile
     try:
@@ -100,7 +104,7 @@ def _warmup_models(whisper_model, xtts_model):
             fd, path = tempfile.mkstemp(suffix=".wav")
             os.close(fd)
             try:
-                xtts_model.generate_speech("hello", path, language="en")
+                styletts_loader.generate_speech_styletts("hello", path, language="en")
             finally:
                 if os.path.exists(path):
                     os.remove(path)
