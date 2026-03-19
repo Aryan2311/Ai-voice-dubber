@@ -1,4 +1,4 @@
-# Worker: EC2 GPU (g5.xlarge 24GB recommended). No XTTS/MarianMT; NLLB, StyleTTS2, Phi-3, RVC only.
+# Worker: EC2 GPU (g5.xlarge 24GB recommended). No XTTS/MarianMT; NLLB, StyleTTS2, Phi-3.
 torch
 # NLLB + Phi-3 + StyleTTS2 (StyleTTS2 needs >=4.36)
 transformers>=4.36,<4.46
@@ -13,8 +13,6 @@ pydub
 pyphen
 # StyleTTS2 (TTS with prosody/voice clone)
 styletts2
-# RVC voice conversion (needs RVC_MODEL_PATH to a .pth file)
-rvc-python
 # Voice isolation for reference preprocessing (Demucs)
 demucs
 # Optional: reduce CPU memory for Phi-3

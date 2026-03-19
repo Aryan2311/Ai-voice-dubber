@@ -1,5 +1,5 @@
 """
-Translation: NLLB-200 (or MarianMT fallback). Runs on CPU.
+Translation: NLLB-200 only. Runs on CPU.
 """
 import logging
 from typing import Any, Dict, List

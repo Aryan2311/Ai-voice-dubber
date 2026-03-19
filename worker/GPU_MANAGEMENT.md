@@ -36,22 +36,21 @@ Delete SQS message
 | Job type             | GPU lock | Notes                          |
 |----------------------|----------|--------------------------------|
 | TRANSCRIBE           | Yes      | Whisper                        |
-| TRANSLATE_TRANSCRIPT | Yes      | MarianMT                       |
+| TRANSLATE_TRANSCRIPT | Yes      | NLLB                           |
 | GENERATE_SUBTITLE    | No       | Format only (SRT/VTT from JSON)|
-| TEXT_TO_SPEECH       | Yes      | XTTS, optional RVC             |
-| DUB_MEDIA            | Yes      | Whisper, MarianMT, XTTS, RVC   |
+| TEXT_TO_SPEECH       | Yes      | StyleTTS2                      |
+| DUB_MEDIA            | Yes      | Whisper, NLLB, StyleTTS2       |
 
 ## VRAM (example)
 
 - Whisper large: ~10 GB  
-- XTTS: ~6 GB  
-- RVC: ~4 GB  
-- Total worst case: ~20 GB → keep **MAX_GPU_JOBS = 1** on 24 GB (e.g. A10G).
+- StyleTTS2: ~6 GB  
+- Total worst case remains within 24 GB with sequential execution.
 
 ## Model loading and warmup
 
 - Models are loaded **once** in `load_models_once()` at startup.
-- Optional **warmup** (e.g. XTTS "hello") runs inside a `gpu_session()` after load to avoid first-inference delay.
+- Optional **warmup** (e.g. StyleTTS2 "hello") runs inside a `gpu_session()` after load to avoid first-inference delay.
 
 ## Safe execution
 

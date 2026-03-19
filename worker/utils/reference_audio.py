@@ -1,5 +1,5 @@
 """
-Reference audio preprocessing for StyleTTS2 and RVC.
+Reference audio preprocessing for StyleTTS2.
 
 Best practice:
 - Short clean segments: 3–10 s (we use 3–8 s)
@@ -17,7 +17,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# StyleTTS2 / RVC reference format (user recommendation)
+# StyleTTS2 reference format (user recommendation)
 REFERENCE_TARGET_SR = 22050
 REFERENCE_MAX_DURATION_SEC = 8
 REFERENCE_MIN_DURATION_SEC = 3
@@ -122,7 +122,7 @@ def ensure_preprocessed_reference(
 ) -> str:
     """
     If raw_path exists, preprocess to a new file in tmp_dir and return its path.
-    Otherwise return raw_path. Caller can use the returned path for StyleTTS2/RVC.
+    Otherwise return raw_path. Caller can use the returned path for StyleTTS2.
     """
     if not raw_path or not os.path.isfile(raw_path):
         return raw_path

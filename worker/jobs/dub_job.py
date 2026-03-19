@@ -1,5 +1,5 @@
 """
-DUB_MEDIA: full pipeline (ASR → translate → rewrite → TTS → align → RVC → merge).
+DUB_MEDIA: full pipeline (ASR → translate → rewrite → TTS → align → merge).
 Output: video -> dubbed/{media_id}/{lang}.mp4; audio-only -> audio/{media_id}/{lang}.wav
 Same S3 contract as before; backend APIs unchanged.
 """

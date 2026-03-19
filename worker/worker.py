@@ -78,15 +78,12 @@ def load_models_once():
     logger.info("Loading AI models (once) at startup...")
     try:
         from worker.models import whisper_loader, nllb_loader, styletts_loader
-        from worker.ai_models import rvc_model
         whisper_loader.load_whisper()
         logger.info("Whisper loaded.")
         nllb_loader.load_nllb()
         logger.info("NLLB loaded.")
         styletts_loader.get_styletts_model()
         logger.info("StyleTTS2 loaded.")
-        rvc_model.load_rvc()
-        logger.info("RVC loaded (or skipped if RVC_MODEL_PATH not set).")
         from worker.models import llm_loader
         llm_loader.get_llm()
         logger.info("Rewrite LLM loaded.")

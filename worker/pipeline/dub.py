@@ -1,5 +1,5 @@
 """
-Full dubbing pipeline: ASR → prosody extraction → translate → rewrite → TTS (prosody-conditioned) → align → RVC → merge.
+Full dubbing pipeline: ASR → prosody extraction → translate → rewrite → TTS (prosody-conditioned) → align → merge.
 Same S3 contract: transcripts/{media_id}/original.json, dubbed/{media_id}/{lang}.mp4 or audio/{media_id}/{lang}.wav.
 """
 import json
@@ -9,7 +9,7 @@ import tempfile
 from typing import Any, Dict, List, Optional
 
 from worker.utils import s3_utils, ffmpeg_utils, media_preprocess
-from worker.pipeline import asr, translate, rewrite, tts, align, rvc
+from worker.pipeline import asr, translate, rewrite, tts, align
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ def run_dub(
 ) -> None:
     """
     Run full dubbing pipeline. Output: dubbed/{media_id}/{lang}.mp4 or audio/{media_id}/{lang}.wav.
-    use_prosody: if True (default), use original segment audio for prosody in StyleTTS2; RVC applies voice identity.
+    use_prosody: if True (default), use original segment audio for prosody in StyleTTS2.
     """
     is_video = _media_is_video(media_id)
     if is_video:
@@ -144,7 +144,7 @@ def run_dub(
                 from worker.prosody.extract import extract_prosody
                 prosody_dict = extract_prosody(style_audio_path)
 
-            # Prosody from original segment only; voice identity applied by RVC later (dual reference).
+            # Prosody from original segment only.
             logger.info("TTS segment %d/%d (generating voice)", i + 1, n_seg)
             tts.generate_speech(
                     seg["text"], seg_wav,
@@ -170,16 +170,6 @@ def run_dub(
         segment_timeline = [(slot_starts[i], slot_ends[i], segment_wavs[i]) for i in range(len(translated))]
         dubbed_audio_path = os.path.join(tmp, "dubbed.wav")
         align.build_timeline_wav(segment_timeline, total_duration_sec, dubbed_audio_path)
-
-        if speaker_wav:
-            try:
-                from worker.ai_models import rvc_model
-                if rvc_model.load_rvc() is not None:
-                    rvc_path = os.path.join(tmp, "dubbed_rvc.wav")
-                    if rvc.convert_voice(dubbed_audio_path, rvc_path, speaker_wav):
-                        dubbed_audio_path = rvc_path
-            except RuntimeError as e:
-                logger.warning("RVC not configured (set RVC_MODEL_PATH): %s", e)
 
         if is_video:
             output_path = os.path.join(tmp, "output.mp4")

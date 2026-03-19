@@ -1,6 +1,6 @@
 """
 Audio utilities: load WAV, save WAV, simple concatenation or segment handling.
-Worker can use this for RVC/XTTS output handling.
+Worker can use this for TTS output handling.
 Timestamp-aligned dubbing: place each TTS clip at segment start and time-stretch to fit (end - start).
 """
 import logging

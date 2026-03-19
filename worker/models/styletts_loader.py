@@ -1,10 +1,10 @@
 """
 StyleTTS2 TTS. GPU. Mandatory; no XTTS fallback.
 
-Dual reference: prosody vs voice identity.
+Dual reference in TTS context:
 - Prosody (rhythm, emotion) → from original segment audio (style_audio_path). Use in dubbing.
-- Voice identity → from RVC after TTS, not from StyleTTS2 when dubbing.
-So when style_audio_path is set we use only that (prosody from original); speaker_wav is for RVC.
+- Voice guidance (standalone TTS) → optional speaker_wav_path when no style_audio_path.
+So when style_audio_path is set we use only that reference.
 """
 import logging
 import os
@@ -43,9 +43,8 @@ def generate_speech_styletts(
 ) -> None:
     """
     Generate speech. Dual reference:
-    - style_audio_path: prosody from original segment (use in dubbing; do not pass speaker here).
+    - style_audio_path: prosody from original segment (use in dubbing).
     - speaker_wav_path: voice reference only when no style_audio_path (e.g. standalone TTS).
-    Voice identity in dubbing is applied by RVC after this step.
     """
     model = get_styletts_model()
     # Prefer prosody from original segment; only use speaker_wav when no segment ref (e.g. TTS job).
