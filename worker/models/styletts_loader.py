@@ -23,13 +23,19 @@ def get_styletts_model():
     checkpoint = os.getenv("STYLETTS2_CHECKPOINT")
     config = os.getenv("STYLETTS2_CONFIG")
     if checkpoint and config:
+        logger.info(
+            "[styletts] Loading StyleTTS2 from checkpoint=%r config=%r …",
+            checkpoint,
+            config,
+        )
         _styletts_model = tts.StyleTTS2(
             model_checkpoint_path=checkpoint,
             config_path=config,
         )
     else:
+        logger.info("[styletts] Loading StyleTTS2 with default checkpoints (GPU) …")
         _styletts_model = tts.StyleTTS2()
-    logger.info("StyleTTS2 loaded.")
+    logger.info("[styletts] StyleTTS2 ready.")
     return _styletts_model
 
 

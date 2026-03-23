@@ -75,10 +75,13 @@ def load_nllb() -> Tuple[Any, Any]:
     if _model is not None:
         return _tokenizer, _model
     from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
     name = "facebook/nllb-200-distilled-600M"
+    logger.info("[nllb] Step 1/2: loading tokenizer from %s …", name)
     _tokenizer = AutoTokenizer.from_pretrained(name)
+    logger.info("[nllb] Tokenizer ready; step 2/2: loading seq2seq weights (may download) …")
     _model = AutoModelForSeq2SeqLM.from_pretrained(name)
-    logger.info("NLLB-200 loaded: %s", name)
+    logger.info("[nllb] NLLB-200 fully loaded: %s", name)
     return _tokenizer, _model
 
 

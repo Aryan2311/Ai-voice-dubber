@@ -21,8 +21,10 @@ def get_llm():
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
     model_name = os.getenv("REWRITE_LLM_MODEL", DEFAULT_MODEL)
-    logger.info("Loading rewrite LLM: %s (CPU)", model_name)
+    logger.info("[llm] Loading rewrite LLM on CPU: %s", model_name)
+    logger.info("[llm] Step 1/2: tokenizer (download + load) …")
     _tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    logger.info("[llm] Tokenizer ready; step 2/2: causal LM weights (large; may take several minutes) …")
     _model = AutoModelForCausalLM.from_pretrained(
         model_name,
         device_map="cpu",
@@ -30,7 +32,7 @@ def get_llm():
         low_cpu_mem_usage=True,
         trust_remote_code=True,
     )
-    logger.info("Rewrite LLM loaded.")
+    logger.info("[llm] Rewrite LLM weights loaded.")
     return _model, _tokenizer
 
 

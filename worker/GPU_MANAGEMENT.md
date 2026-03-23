@@ -49,8 +49,22 @@ Delete SQS message
 
 ## Model loading and warmup
 
-- Models are loaded **once** in `load_models_once()` at startup.
-- Optional **warmup** (e.g. StyleTTS2 "hello") runs inside a `gpu_session()` after load to avoid first-inference delay.
+- By default, models are loaded **once** in `load_models_once()` at startup, **strictly in order**: Whisper → NLLB → StyleTTS2 → rewrite LLM (Phi-3) → optional StyleTTS GPU warmup. No parallel model initialization in that sequence.
+- Logs use `[startup] 1/5` … `5/5` with **before/after** RSS (Linux) and GPU memory, and **elapsed seconds** per phase.
+- Before any Hugging Face use, the worker sets `HF_HUB_DOWNLOAD_MAX_WORKERS=1`, `HF_HUB_ENABLE_HF_TRANSFER=0`, and `TOKENIZERS_PARALLELISM=false` so hub/tokenizer work stays as sequential as the library allows (shard downloads may still show progress bars).
+- Optional **warmup** (e.g. StyleTTS2 "hello") runs inside a `gpu_session()` as phase **5/5** after load to avoid first-inference delay.
+
+### Reduce startup load (EC2 “hanging” during first boot)
+
+Heavy startup = Whisper + NLLB + StyleTTS2 + Phi-3 download/load + optional GPU warmup, all competing for CPU RAM, disk, and GPU. Tune with env vars (Docker `-e` or compose):
+
+| Variable | Effect |
+|----------|--------|
+| `WORKER_LAZY_LOAD=1` | **Skip all** startup loads; each model loads on **first job** that needs it. Lightest boot; **first** transcript/TTS/dub is much slower. |
+| `WORKER_SKIP_LLM_PRELOAD=1` | Skip loading **Phi-3** at startup (~large CPU RAM + HF download). Loads on first rewrite/dub. |
+| `WORKER_SKIP_WARMUP=1` | Skip StyleTTS2 **GPU warmup** inference after load (saves one GPU spike at boot). |
+| `MODEL_LOAD_STAGGER_SEC=15` | **Seconds** to sleep between each eager load step + `gc` / `empty_cache` (spread peak RAM/IO). Use `10`–`30` if the instance feels stuck. |
+| `WHISPER_MODEL_SIZE` | Default `base`. Smaller = less VRAM/RAM at startup (e.g. `small`, `tiny` for lighter boxes — quality tradeoff). |
 
 ## Safe execution
 
