@@ -15,10 +15,23 @@ logger = logging.getLogger(__name__)
 _styletts_model = None
 
 
+def _ensure_nltk_for_styletts():
+    """
+    NLTK 3.8+: word_tokenize/sent_tokenize need punkt_tab; StyleTTS2 only pulled punkt during its init.
+    nltk.download is a no-op when data is already cached (e.g. Docker image bake step).
+    """
+    import nltk
+
+    logger.info("[styletts] Ensuring NLTK punkt + punkt_tab …")
+    nltk.download("punkt", quiet=True)
+    nltk.download("punkt_tab", quiet=True)
+
+
 def get_styletts_model():
     global _styletts_model
     if _styletts_model is not None:
         return _styletts_model
+    _ensure_nltk_for_styletts()
     from styletts2 import tts
     checkpoint = os.getenv("STYLETTS2_CHECKPOINT")
     config = os.getenv("STYLETTS2_CONFIG")

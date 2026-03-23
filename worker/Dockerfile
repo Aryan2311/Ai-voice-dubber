@@ -14,6 +14,8 @@ WORKDIR /app
 
 COPY worker/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+# StyleTTS2 + NLTK 3.8+ need punkt_tab at inference (not only punkt)
+RUN python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab')"
 
 COPY worker/ /app/worker/
 

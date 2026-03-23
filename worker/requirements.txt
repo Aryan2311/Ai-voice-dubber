@@ -11,7 +11,8 @@ librosa
 soundfile
 pydub
 pyphen
-# StyleTTS2 (TTS with prosody/voice clone)
+# StyleTTS2 (TTS with prosody/voice clone); explicit NLTK for punkt_tab (NLTK 3.8+)
+nltk>=3.8.1
 styletts2
 # Voice isolation for reference preprocessing (Demucs)
 demucs
