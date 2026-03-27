@@ -3,6 +3,7 @@ EC2 GPU Worker: SQS → local queue → GPU scheduler → one job at a time.
 - Listener thread: receive SQS messages, enqueue (receipt_handle, job).
 - Processor thread: get job from queue; GPU jobs run inside gpu_session(), then delete SQS message.
 Job types: TRANSCRIBE, TRANSLATE_TRANSCRIPT, GENERATE_SUBTITLE (CPU), TEXT_TO_SPEECH, DUB_MEDIA.
+TEXT_TO_SPEECH requires voice_sample only; DUB_MEDIA requires voice_sample (plus source audio on S3 for segment prosody).
 """
 import contextlib
 import gc
@@ -266,7 +267,7 @@ def _warmup_models(styletts_loader):
         fd, path = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
         try:
-            styletts_loader.generate_speech_styletts("hello", path, language="en")
+            styletts_loader.warmup_generate_short(path, language="en")
         finally:
             if os.path.exists(path):
                 os.remove(path)

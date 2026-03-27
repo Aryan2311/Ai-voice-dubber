@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import tempfile
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from worker.utils import s3_utils, ffmpeg_utils, media_preprocess
 from worker.pipeline import asr, translate, rewrite, tts, align
@@ -59,12 +59,13 @@ def _slice_segment_audio(source_wav: str, start_sec: float, end_sec: float, out_
 def run_dub(
     media_id: str,
     language: str,
-    voice_sample_s3: Optional[str] = None,
-    use_prosody: bool = True,
+    voice_sample_s3: str,
 ) -> None:
     """
     Run full dubbing pipeline. Output: dubbed/{media_id}/{lang}.mp4 or audio/{media_id}/{lang}.wav.
-    use_prosody: if True (default), use original segment audio for prosody in StyleTTS2.
+
+    With dialogue segments: requires voice_sample_s3 (clone timbre) and audio/{media_id}/source.wav
+    on S3; each segment uses a slice of source audio for the prosody half and the clone for timbre.
     """
     is_video = _media_is_video(media_id)
     if is_video:
@@ -118,41 +119,38 @@ def run_dub(
             total_duration_sec = ffmpeg_utils.get_audio_duration_seconds(source_wav)
         total_duration_sec = max(total_duration_sec, max((s["end"] for s in translated), default=0.0) + 0.5)
 
-        speaker_wav = None
-        if voice_sample_s3:
-            raw = s3_utils.download_to_temp(voice_sample_s3, suffix=".wav")
-            from worker.utils.reference_audio import ensure_preprocessed_reference
-            speaker_wav = ensure_preprocessed_reference(raw, tmp, isolate_voice=True)
+        raw_voice = s3_utils.download_to_temp(voice_sample_s3, suffix=".wav")
+        from worker.utils.reference_audio import ensure_preprocessed_reference, preprocess_prosody_segment
+
+        speaker_wav = ensure_preprocessed_reference(raw_voice, tmp, isolate_voice=True)
+        if not os.path.isfile(speaker_wav) or os.path.getsize(speaker_wav) == 0:
+            raise RuntimeError("voice_sample produced no usable WAV after preprocessing")
 
         source_wav_path = os.path.join(tmp, "source.wav")
-        if not os.path.isfile(source_wav_path) and use_prosody:
-            s3_utils.download_file(f"audio/{media_id}/source.wav", source_wav_path)
+        s3_utils.download_file(f"audio/{media_id}/source.wav", source_wav_path)
+        if not os.path.isfile(source_wav_path) or os.path.getsize(source_wav_path) == 0:
+            raise RuntimeError("Missing or empty audio/%s/source.wav (required for segment prosody)" % media_id)
 
         segment_wavs = []
         n_seg = len(translated)
         for i, seg in enumerate(translated):
             seg_wav = os.path.join(tmp, "seg_%d.wav" % i)
-            style_audio_path = None
-            prosody_dict = None
-            if use_prosody and os.path.isfile(source_wav_path):
-                seg_audio_raw = os.path.join(tmp, "seg_audio_raw_%d.wav" % i)
-                _slice_segment_audio(source_wav_path, seg["start"], seg["end"], seg_audio_raw)
-                seg_audio = os.path.join(tmp, "seg_audio_%d.wav" % i)
-                from worker.utils.reference_audio import preprocess_prosody_segment
-                preprocess_prosody_segment(seg_audio_raw, seg_audio)
-                style_audio_path = seg_audio if os.path.isfile(seg_audio) else seg_audio_raw
-                from worker.prosody.extract import extract_prosody
-                prosody_dict = extract_prosody(style_audio_path)
+            seg_audio_raw = os.path.join(tmp, "seg_audio_raw_%d.wav" % i)
+            _slice_segment_audio(source_wav_path, seg["start"], seg["end"], seg_audio_raw)
+            seg_audio = os.path.join(tmp, "seg_audio_%d.wav" % i)
+            preprocess_prosody_segment(seg_audio_raw, seg_audio)
+            style_audio_path = seg_audio if os.path.isfile(seg_audio) and os.path.getsize(seg_audio) > 0 else seg_audio_raw
+            if not os.path.isfile(style_audio_path) or os.path.getsize(style_audio_path) == 0:
+                raise RuntimeError("Failed to build prosody WAV for segment %d/%d" % (i + 1, n_seg))
 
-            # Prosody from original segment only.
             logger.info("TTS segment %d/%d (generating voice)", i + 1, n_seg)
             tts.generate_speech(
-                    seg["text"], seg_wav,
-                    language=language,
-                    speaker_wav_path=None if style_audio_path else speaker_wav,
-                    prosody=prosody_dict,
-                    style_audio_path=style_audio_path,
-                )
+                seg["text"],
+                seg_wav,
+                language=language,
+                speaker_wav_path=speaker_wav,
+                style_audio_path=style_audio_path,
+            )
             target_dur = seg["end"] - seg["start"]
             aligned_wav = os.path.join(tmp, "aligned_%d.wav" % i)
             align.align_segment_to_duration(seg_wav, aligned_wav, target_dur)
