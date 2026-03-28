@@ -63,6 +63,7 @@ Sentence:
 {text}
 
 Rewritten:"""
+    logger.info("[llm] rewrite prompt:\n%s", prompt)
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024)
     with __import__("torch").no_grad():
         out = model.generate(

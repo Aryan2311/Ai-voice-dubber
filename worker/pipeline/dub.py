@@ -99,12 +99,19 @@ def run_dub(
                 s3_utils.upload_bytes(b"", f"audio/{media_id}/{language}.wav", content_type="audio/wav")
             return out_key
 
-        # CPU: translate then syllable-aware rewrite per segment
+        # CPU: translate then syllable-aware rewrite per segment (Phi-3; no log until first generate — can be quiet for many minutes)
         translated = translate.translate_segments(segments, source_lang, language)
+        n_seg = len(translated)
+        logger.info(
+            "DUB_MEDIA media_id=%s rewrite %d segments (Phi-3 CPU; first line may take longest)",
+            media_id,
+            n_seg,
+        )
         from worker.translation.syllable_counter import count_syllables
-        for seg in translated:
+        for i, seg in enumerate(translated):
             orig_text = seg.get("original_text", "")
             target_syllables = count_syllables(orig_text, source_lang) if orig_text else None
+            logger.info("Rewrite segment %d/%d (Phi-3)", i + 1, n_seg)
             seg["text"] = rewrite.rewrite(
                 seg["text"], language=language, target_syllables=target_syllables
             )
@@ -134,7 +141,6 @@ def run_dub(
             raise RuntimeError("Missing or empty audio/%s/source.wav (required for segment prosody)" % media_id)
 
         segment_wavs = []
-        n_seg = len(translated)
         for i, seg in enumerate(translated):
             seg_wav = os.path.join(tmp, "seg_%d.wav" % i)
             seg_audio_raw = os.path.join(tmp, "seg_audio_raw_%d.wav" % i)
