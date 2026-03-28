@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import tempfile
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from worker.utils import s3_utils, ffmpeg_utils, media_preprocess
 from worker.pipeline import asr, translate, rewrite, tts, align
@@ -60,12 +60,14 @@ def run_dub(
     media_id: str,
     language: str,
     voice_sample_s3: str,
-) -> None:
+    skip_if_output_exists: bool = False,
+) -> Optional[str]:
     """
     Run full dubbing pipeline. Output: dubbed/{media_id}/{lang}.mp4 or audio/{media_id}/{lang}.wav.
+    Returns S3 key of dubbed output on success (for job_completions/{job_id}.json).
 
-    With dialogue segments: requires voice_sample_s3 (clone timbre) and audio/{media_id}/source.wav
-    on S3; each segment uses a slice of source audio for the prosody half and the clone for timbre.
+    skip_if_output_exists: if True, skip pipeline when output already on S3 (legacy); default False
+    so re-dubs always regenerate and overwrite.
     """
     is_video = _media_is_video(media_id)
     if is_video:
@@ -74,9 +76,9 @@ def run_dub(
     else:
         out_key = f"audio/{media_id}/{language}.wav"
         min_size = 256
-    if s3_utils.object_exists_and_non_empty(out_key, min_size=min_size):
+    if skip_if_output_exists and s3_utils.object_exists_and_non_empty(out_key, min_size=min_size):
         logger.info("DUB_MEDIA media_id=%s language=%s output already exists, skipping", media_id, language)
-        return
+        return out_key
 
     with tempfile.TemporaryDirectory() as tmp:
         orig = _ensure_original_transcript(media_id, tmp)
@@ -95,7 +97,7 @@ def run_dub(
                 s3_utils.upload_file(out_mp4, out_key, content_type="video/mp4")
             else:
                 s3_utils.upload_bytes(b"", f"audio/{media_id}/{language}.wav", content_type="audio/wav")
-            return
+            return out_key
 
         # CPU: translate then syllable-aware rewrite per segment
         translated = translate.translate_segments(segments, source_lang, language)
@@ -180,3 +182,4 @@ def run_dub(
                 raise RuntimeError("Dubbed audio file missing or empty")
             s3_utils.upload_file(dubbed_audio_path, out_key, content_type="audio/wav")
         logger.info("DUB_MEDIA media_id=%s uploaded key=%s segments=%d", media_id, out_key, len(segments))
+        return out_key
