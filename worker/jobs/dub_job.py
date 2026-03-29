@@ -1,5 +1,5 @@
 """
-DUB_MEDIA: full pipeline (ASR → translate → rewrite → TTS → align → merge).
+DUB_MEDIA: full pipeline (ASR → translate → TTS → align → merge).
 Output: video -> dubbed/{media_id}/{lang}.mp4; audio-only -> audio/{media_id}/{lang}.wav
 Requires voice_sample on every job (clone timbre); segment prosody comes from source audio.
 Writes job_completions/{job_id}.json on success so the backend manifest can mark the job completed.

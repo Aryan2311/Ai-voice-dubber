@@ -1,5 +1,5 @@
 """
-Full dubbing pipeline: ASR → prosody extraction → translate → rewrite → TTS (prosody-conditioned) → align → merge.
+Full dubbing pipeline: ASR → prosody extraction → translate (NLLB) → TTS (prosody-conditioned) → align → merge.
 Same S3 contract: transcripts/{media_id}/original.json, dubbed/{media_id}/{lang}.mp4 or audio/{media_id}/{lang}.wav.
 """
 import json
@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from worker.utils.job_logging import log_preview
 
 from worker.utils import s3_utils, ffmpeg_utils, media_preprocess
-from worker.pipeline import asr, translate, rewrite, tts, align
+from worker.pipeline import asr, translate, tts, align
 
 logger = logging.getLogger(__name__)
 
@@ -138,46 +138,11 @@ def run_dub(
             segments, source_lang, language, log_context=ctx
         )
         logger.info(
-            "DUB_PIPELINE %s phase=translate_done elapsed_sec=%.1f",
+            "DUB_PIPELINE %s phase=translate_done elapsed_sec=%.1f (no LLM rewrite; TTS uses NLLB text)",
             ctx,
             time.monotonic() - t_tr,
         )
         n_seg = len(translated)
-        logger.info(
-            "DUB_PIPELINE %s phase=rewrite_begin segments=%d (Phi-3 CPU)",
-            ctx,
-            n_seg,
-        )
-        from worker.translation.syllable_counter import count_syllables
-        t_rw = time.monotonic()
-        for i, seg in enumerate(translated):
-            orig_text = seg.get("original_text", "")
-            target_syllables = count_syllables(orig_text, source_lang) if orig_text else None
-            logger.info(
-                "DUB_PIPELINE %s rewrite segment %d/%d target_syllables=%s in_preview=%r",
-                ctx,
-                i + 1,
-                n_seg,
-                target_syllables,
-                log_preview(seg.get("text", ""), 120),
-            )
-            t_seg = time.monotonic()
-            seg["text"] = rewrite.rewrite(
-                seg["text"], language=language, target_syllables=target_syllables
-            )
-            logger.info(
-                "DUB_PIPELINE %s rewrite segment %d/%d done elapsed_sec=%.2f out_preview=%r",
-                ctx,
-                i + 1,
-                n_seg,
-                time.monotonic() - t_seg,
-                log_preview(seg["text"], 120),
-            )
-        logger.info(
-            "DUB_PIPELINE %s phase=rewrite_done total_elapsed_sec=%.1f",
-            ctx,
-            time.monotonic() - t_rw,
-        )
 
         # Total duration
         if is_video:

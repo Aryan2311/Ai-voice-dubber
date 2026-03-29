@@ -193,7 +193,7 @@ def load_models_once():
 
         w_size = os.getenv("WHISPER_MODEL_SIZE", "base")
         with _startup_phase(
-            "1/5",
+            "1/4",
             "Whisper (ASR)",
             f"model_size={w_size!r} (env WHISPER_MODEL_SIZE)",
         ):
@@ -203,7 +203,7 @@ def load_models_once():
             )
 
         with _startup_phase(
-            "2/5",
+            "2/4",
             "NLLB-200 translation",
             "facebook/nllb-200-distilled-600M — tokenizer then weights (CPU)",
         ):
@@ -217,34 +217,17 @@ def load_models_once():
             if ck and cf
             else "default checkpoints (StyleTTS2())"
         )
-        with _startup_phase("3/5", "StyleTTS2 (GPU TTS)", stts_detail):
+        with _startup_phase("3/4", "StyleTTS2 (GPU TTS)", stts_detail):
             styletts_loader.get_styletts_model()
             logger.info("[startup] StyleTTS2 inference object ready.")
 
-        if _env_truthy("WORKER_SKIP_LLM_PRELOAD"):
-            logger.info(
-                "[startup] 4/5 SKIP: WORKER_SKIP_LLM_PRELOAD=1 — "
-                "rewrite LLM (Phi-3) will load on first dub/rewrite job."
-            )
-        else:
-            from worker.models import llm_loader
-
-            llm_name = os.getenv("REWRITE_LLM_MODEL", llm_loader.DEFAULT_MODEL)
-            with _startup_phase(
-                "4/5",
-                "Rewrite LLM (Phi-3, CPU)",
-                f"model={llm_name!r} — tokenizer download/load then weights (can take many minutes)",
-            ):
-                llm_loader.get_llm()
-                logger.info("[startup] Rewrite LLM + tokenizer ready.")
-
         if _env_truthy("WORKER_SKIP_WARMUP"):
             logger.info(
-                "[startup] 5/5 SKIP: WORKER_SKIP_WARMUP=1 — no StyleTTS GPU warmup."
+                "[startup] 4/4 SKIP: WORKER_SKIP_WARMUP=1 — no StyleTTS GPU warmup."
             )
         else:
             with _startup_phase(
-                "5/5",
+                "4/4",
                 "StyleTTS2 GPU warmup",
                 "short inference 'hello' inside gpu_session()",
             ):

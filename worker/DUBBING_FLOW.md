@@ -2,10 +2,10 @@
 
 ## Worker layout
 
-- **pipeline/** – ASR → translate → rewrite (syllable-aware) → TTS → align → merge
-- **models/** – Whisper, NLLB, Phi-3 (rewrite), StyleTTS2
+- **pipeline/** – ASR → translate (NLLB) → TTS → align → merge
+- **models/** – Whisper, NLLB, StyleTTS2
 - **prosody/** – Extract pitch/energy/pauses from original segment audio
-- **translation/** – Syllable counting utilities for rewrite constraints
+- **translation/** – Syllable counting helpers (optional / legacy; dub uses NLLB text only)
 - **scheduler/** – Sequential GPU lock and local queue
 
 ## Core behavior
@@ -27,6 +27,5 @@
 ## Env
 
 - `STYLETTS2_CHECKPOINT`, `STYLETTS2_CONFIG`
-- `REWRITE_LLM_MODEL`
 - `WHISPER_MODEL_SIZE`
 - Optional: Demucs installed for voice isolation

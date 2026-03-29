@@ -1,6 +1,6 @@
-# Worker: EC2 GPU (g5.xlarge 24GB recommended). No XTTS/MarianMT; NLLB, StyleTTS2, Phi-3.
+# Worker: EC2 GPU (g5.xlarge 24GB recommended). NLLB, StyleTTS2.
 torch
-# NLLB + Phi-3 + StyleTTS2 (StyleTTS2 needs >=4.36)
+# NLLB + StyleTTS2 (StyleTTS2 needs >=4.36)
 transformers>=4.36,<4.46
 sentencepiece
 sacremoses
@@ -16,6 +16,3 @@ nltk>=3.8.1
 styletts2
 # Voice isolation for reference preprocessing (Demucs)
 demucs
-# Optional: reduce CPU memory for Phi-3
-# bitsandbytes
-# accelerate
