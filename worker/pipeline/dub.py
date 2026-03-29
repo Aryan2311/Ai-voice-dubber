@@ -168,6 +168,7 @@ def run_dub(
         if not os.path.isfile(source_wav_path) or os.path.getsize(source_wav_path) == 0:
             raise RuntimeError("Missing or empty audio/%s/source.wav (required for segment prosody)" % media_id)
 
+        t_tts = time.monotonic()
         segment_wavs = []
         for i, seg in enumerate(translated):
             seg_wav = os.path.join(tmp, "seg_%d.wav" % i)
