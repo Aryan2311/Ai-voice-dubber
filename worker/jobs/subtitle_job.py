@@ -5,9 +5,11 @@ import json
 import logging
 import os
 import tempfile
+import time
 
 from worker.utils import s3_utils
 from worker.jobs import translate_job
+from worker.utils.job_logging import brief_job
 
 logger = logging.getLogger(__name__)
 
@@ -54,12 +56,28 @@ def run_subtitle_job(job: dict) -> None:
     fmt = (job.get("format") or "srt").lower()
     if fmt not in ("srt", "vtt"):
         fmt = "srt"
-    logger.info("GENERATE_SUBTITLE media_id=%s language=%s format=%s", media_id, language, fmt)
+    t0 = time.monotonic()
+    ctx = "media_id=%s language=%s format=%s" % (media_id, language, fmt)
+    logger.info(
+        "GENERATE_SUBTITLE begin %s payload=%s",
+        ctx,
+        brief_job(job),
+    )
 
     transcript_key = f"transcripts/{media_id}/{language}.json"
     if not s3_utils.object_exists(transcript_key):
-        logger.info("GENERATE_SUBTITLE media_id=%s running TRANSLATE first", media_id)
+        logger.info(
+            "GENERATE_SUBTITLE %s missing transcript_key=%s — invoking TRANSLATE_TRANSCRIPT",
+            ctx,
+            transcript_key,
+        )
         translate_job.run_translate_job({"job_type": "TRANSLATE_TRANSCRIPT", "media_id": media_id, "language": language})
+    else:
+        logger.info(
+            "GENERATE_SUBTITLE %s using existing transcript_key=%s",
+            ctx,
+            transcript_key,
+        )
 
     with tempfile.TemporaryDirectory() as tmp:
         local_json = os.path.join(tmp, "transcript.json")
@@ -77,4 +95,11 @@ def run_subtitle_job(job: dict) -> None:
 
         key = f"subtitles/{media_id}/{language}.{fmt}"
         s3_utils.upload_bytes(content.encode("utf-8"), key, content_type=content_type)
-        logger.info("GENERATE_SUBTITLE media_id=%s uploaded key=%s segments=%d", media_id, key, len(segments))
+        logger.info(
+            "GENERATE_SUBTITLE done %s uploaded_key=%s segments=%d bytes=%d elapsed_sec=%.1f",
+            ctx,
+            key,
+            len(segments),
+            len(content.encode("utf-8")),
+            time.monotonic() - t0,
+        )

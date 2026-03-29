@@ -18,8 +18,9 @@ from botocore.config import Config
 
 from worker.jobs import transcribe_job, translate_job, subtitle_job, tts_job, dub_job
 from worker.gpu import gpu_session
-from worker.scheduler import add_job, get_job
+from worker.scheduler import add_job, get_job, queue_size
 from worker.utils import s3_utils
+from worker.utils.job_logging import brief_job
 
 # Clear format for docker logs: UTC timestamp, level, name, message
 logging.Formatter.converter = time.gmtime
@@ -291,7 +292,13 @@ def sqs_listener_loop(sqs, queue_url, wait_time_seconds=20):
                     add_job(receipt_handle, job)
                     job_type = job.get("job_type", "?")
                     job_id = job.get("job_id") or job.get("media_id") or job.get("request_id") or "—"
-                    logger.info("Enqueued job_type=%s job_id=%s", job_type, job_id)
+                    logger.info(
+                        "SQS→local_queue job_type=%s job_id=%s queue_depth_after=%d payload=%s",
+                        job_type,
+                        job_id,
+                        queue_size(),
+                        brief_job(job),
+                    )
                 except Exception as e:
                     logger.exception("Failed to enqueue message: %s", e)
         except Exception as e:
@@ -310,17 +317,34 @@ def processor_loop(sqs, queue_url):
             job_id = job.get("job_id") or job.get("media_id") or job.get("request_id") or "—"
             started = time.monotonic()
             try:
-                logger.info("Starting job_type=%s job_id=%s", job_type, job_id)
+                logger.info(
+                    "Job BEGIN job_type=%s job_id=%s requires_gpu=%s payload=%s",
+                    job_type,
+                    job_id,
+                    requires_gpu(job),
+                    brief_job(job),
+                )
                 if requires_gpu(job):
                     with gpu_session():
                         handle_job(job)
                 else:
                     handle_job(job)
                 elapsed = time.monotonic() - started
-                logger.info("Completed job_type=%s job_id=%s elapsed_sec=%.1f", job_type, job_id, elapsed)
+                logger.info(
+                    "Job OK job_type=%s job_id=%s elapsed_sec=%.1f",
+                    job_type,
+                    job_id,
+                    elapsed,
+                )
             except Exception as e:
                 elapsed = time.monotonic() - started
-                logger.exception("Failed job_type=%s job_id=%s elapsed_sec=%.1f error=%s", job_type, job_id, elapsed, e)
+                logger.exception(
+                    "Job FAIL job_type=%s job_id=%s elapsed_sec=%.1f payload=%s",
+                    job_type,
+                    job_id,
+                    elapsed,
+                    brief_job(job),
+                )
                 # Record failure in S3 so backend/UI can show failed status
                 sid = job.get("job_id")
                 if sid:

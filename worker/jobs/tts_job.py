@@ -7,9 +7,11 @@ a full single-file style embedding). Dubbing jobs use voice_sample + per-segment
 import logging
 import os
 import tempfile
+import time
 
 from worker.utils import s3_utils
 from worker.pipeline import tts
+from worker.utils.job_logging import brief_job
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,12 @@ def run_tts_job(job: dict) -> None:
     if not voice_sample_s3 or not str(voice_sample_s3).strip():
         raise ValueError("TEXT_TO_SPEECH requires non-empty voice_sample (S3 key)")
     voice_sample_s3 = str(voice_sample_s3).strip()
-    logger.info("TEXT_TO_SPEECH request_id=%s language=%s", request_id, language)
+    t0 = time.monotonic()
+    logger.info(
+        "TEXT_TO_SPEECH begin request_id=%s payload=%s",
+        request_id,
+        brief_job(job),
+    )
 
     with tempfile.TemporaryDirectory() as tmp:
         raw_voice = s3_utils.download_to_temp(voice_sample_s3, suffix=".wav")
@@ -54,4 +61,11 @@ def run_tts_job(job: dict) -> None:
 
         s3_key = f"tts/{request_id}/speech.wav"
         s3_utils.upload_file(out_wav, s3_key, content_type="audio/wav")
-        logger.info("TEXT_TO_SPEECH request_id=%s uploaded key=%s", request_id, s3_key)
+        wav_size = os.path.getsize(out_wav) if os.path.isfile(out_wav) else 0
+        logger.info(
+            "TEXT_TO_SPEECH done request_id=%s uploaded_key=%s wav_bytes=%d elapsed_sec=%.1f",
+            request_id,
+            s3_key,
+            wav_size,
+            time.monotonic() - t0,
+        )

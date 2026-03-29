@@ -5,9 +5,11 @@ Requires voice_sample on every job (clone timbre); segment prosody comes from so
 Writes job_completions/{job_id}.json on success so the backend manifest can mark the job completed.
 """
 import logging
+import time
 
 from worker.pipeline.dub import run_dub
 from worker.utils import s3_utils
+from worker.utils.job_logging import brief_job
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,12 @@ def run_dub_job(job: dict) -> None:
         raise ValueError("DUB_MEDIA job must include job_id (backend must send unique id per request)")
     if not voice_sample_s3 or not str(voice_sample_s3).strip():
         raise ValueError("DUB_MEDIA requires non-empty voice_sample (S3 key to clone WAV)")
-    logger.info("DUB_MEDIA job_id=%s media_id=%s language=%s", job_id, media_id, language)
+    t0 = time.monotonic()
+    logger.info(
+        "DUB_MEDIA job begin job_id=%s payload=%s",
+        job_id,
+        brief_job(job),
+    )
 
     skip = bool(job.get("skip_if_exists", False))
     out_key = run_dub(
@@ -34,4 +41,10 @@ def run_dub_job(job: dict) -> None:
         s3_utils.upload_json(
             f"job_completions/{job_id}.json",
             {"status": "completed", "result_s3_key": out_key},
+        )
+        logger.info(
+            "DUB_MEDIA job done job_id=%s result_s3_key=%s elapsed_sec=%.1f",
+            job_id,
+            out_key,
+            time.monotonic() - t0,
         )

@@ -6,7 +6,10 @@ import json
 import logging
 import os
 import tempfile
+import time
 from typing import Any, Dict, List, Optional
+
+from worker.utils.job_logging import log_preview
 
 from worker.utils import s3_utils, ffmpeg_utils, media_preprocess
 from worker.pipeline import asr, translate, rewrite, tts, align
@@ -27,14 +30,31 @@ def _ensure_original_transcript(media_id: str, tmp: str) -> Dict[str, Any]:
     original_key = f"transcripts/{media_id}/original.json"
     if s3_utils.object_exists(original_key):
         path = os.path.join(tmp, "original.json")
+        logger.info(
+            "DUB_PIPELINE media_id=%s loading existing transcript key=%s",
+            media_id,
+            original_key,
+        )
         s3_utils.download_file(original_key, path)
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
+    logger.info(
+        "DUB_PIPELINE media_id=%s no original.json — running ASR then uploading %s",
+        media_id,
+        original_key,
+    )
     media_preprocess.ensure_source_audio(media_id)
     audio_path = os.path.join(tmp, "source.wav")
     s3_utils.download_file(f"audio/{media_id}/source.wav", audio_path)
     # Caller holds GPU session (worker runs DUB_MEDIA inside gpu_session)
+    t_asr = time.monotonic()
     result = asr.transcribe(audio_path)
+    logger.info(
+        "DUB_PIPELINE media_id=%s ASR done segments=%d elapsed_sec=%.1f",
+        media_id,
+        len(result.get("segments", [])),
+        time.monotonic() - t_asr,
+    )
     transcript = {
         "media_id": media_id,
         "segments": result["segments"],
@@ -77,11 +97,25 @@ def run_dub(
         out_key = f"audio/{media_id}/{language}.wav"
         min_size = 256
     if skip_if_output_exists and s3_utils.object_exists_and_non_empty(out_key, min_size=min_size):
-        logger.info("DUB_MEDIA media_id=%s language=%s output already exists, skipping", media_id, language)
+        logger.info(
+            "DUB_PIPELINE media_id=%s language=%s skip_if_output_exists=True key=%s — skip",
+            media_id,
+            language,
+            out_key,
+        )
         return out_key
 
+    ctx = "media_id=%s language=%s" % (media_id, language)
     with tempfile.TemporaryDirectory() as tmp:
+        t0 = time.monotonic()
         orig = _ensure_original_transcript(media_id, tmp)
+        logger.info(
+            "DUB_PIPELINE %s phase=transcript_ready segments=%s source_lang=%s elapsed_sec=%.1f",
+            ctx,
+            len(orig.get("segments", [])),
+            orig.get("language", "en"),
+            time.monotonic() - t0,
+        )
         segments = orig.get("segments", [])
         source_lang = orig.get("language", "en")
 
@@ -99,22 +133,51 @@ def run_dub(
                 s3_utils.upload_bytes(b"", f"audio/{media_id}/{language}.wav", content_type="audio/wav")
             return out_key
 
-        # CPU: translate then syllable-aware rewrite per segment (Phi-3; no log until first generate — can be quiet for many minutes)
-        translated = translate.translate_segments(segments, source_lang, language)
+        t_tr = time.monotonic()
+        translated = translate.translate_segments(
+            segments, source_lang, language, log_context=ctx
+        )
+        logger.info(
+            "DUB_PIPELINE %s phase=translate_done elapsed_sec=%.1f",
+            ctx,
+            time.monotonic() - t_tr,
+        )
         n_seg = len(translated)
         logger.info(
-            "DUB_MEDIA media_id=%s rewrite %d segments (Phi-3 CPU; first line may take longest)",
-            media_id,
+            "DUB_PIPELINE %s phase=rewrite_begin segments=%d (Phi-3 CPU)",
+            ctx,
             n_seg,
         )
         from worker.translation.syllable_counter import count_syllables
+        t_rw = time.monotonic()
         for i, seg in enumerate(translated):
             orig_text = seg.get("original_text", "")
             target_syllables = count_syllables(orig_text, source_lang) if orig_text else None
-            logger.info("Rewrite segment %d/%d (Phi-3)", i + 1, n_seg)
+            logger.info(
+                "DUB_PIPELINE %s rewrite segment %d/%d target_syllables=%s in_preview=%r",
+                ctx,
+                i + 1,
+                n_seg,
+                target_syllables,
+                log_preview(seg.get("text", ""), 120),
+            )
+            t_seg = time.monotonic()
             seg["text"] = rewrite.rewrite(
                 seg["text"], language=language, target_syllables=target_syllables
             )
+            logger.info(
+                "DUB_PIPELINE %s rewrite segment %d/%d done elapsed_sec=%.2f out_preview=%r",
+                ctx,
+                i + 1,
+                n_seg,
+                time.monotonic() - t_seg,
+                log_preview(seg["text"], 120),
+            )
+        logger.info(
+            "DUB_PIPELINE %s phase=rewrite_done total_elapsed_sec=%.1f",
+            ctx,
+            time.monotonic() - t_rw,
+        )
 
         # Total duration
         if is_video:
@@ -151,7 +214,15 @@ def run_dub(
             if not os.path.isfile(style_audio_path) or os.path.getsize(style_audio_path) == 0:
                 raise RuntimeError("Failed to build prosody WAV for segment %d/%d" % (i + 1, n_seg))
 
-            logger.info("TTS segment %d/%d (generating voice)", i + 1, n_seg)
+            logger.info(
+                "DUB_PIPELINE %s TTS segment %d/%d text_preview=%r target_dur_sec=%.3f",
+                ctx,
+                i + 1,
+                n_seg,
+                log_preview(seg.get("text", ""), 100),
+                seg["end"] - seg["start"],
+            )
+            t_utt = time.monotonic()
             tts.generate_speech(
                 seg["text"],
                 seg_wav,
@@ -159,10 +230,23 @@ def run_dub(
                 speaker_wav_path=speaker_wav,
                 style_audio_path=style_audio_path,
             )
+            logger.info(
+                "DUB_PIPELINE %s TTS segment %d/%d generate_elapsed_sec=%.2f",
+                ctx,
+                i + 1,
+                n_seg,
+                time.monotonic() - t_utt,
+            )
             target_dur = seg["end"] - seg["start"]
             aligned_wav = os.path.join(tmp, "aligned_%d.wav" % i)
             align.align_segment_to_duration(seg_wav, aligned_wav, target_dur)
             segment_wavs.append(aligned_wav)
+
+        logger.info(
+            "DUB_PIPELINE %s phase=tts_align_done total_elapsed_sec=%.1f",
+            ctx,
+            time.monotonic() - t_tts,
+        )
 
         # Normalize segment boundaries: back-to-back
         slot_starts, slot_ends = [], []
@@ -175,7 +259,14 @@ def run_dub(
             slot_ends.append(end_sec)
         segment_timeline = [(slot_starts[i], slot_ends[i], segment_wavs[i]) for i in range(len(translated))]
         dubbed_audio_path = os.path.join(tmp, "dubbed.wav")
+        t_merge = time.monotonic()
         align.build_timeline_wav(segment_timeline, total_duration_sec, dubbed_audio_path)
+        logger.info(
+            "DUB_PIPELINE %s phase=timeline_wav built elapsed_sec=%.2f duration_sec=%.2f",
+            ctx,
+            time.monotonic() - t_merge,
+            total_duration_sec,
+        )
 
         if is_video:
             output_path = os.path.join(tmp, "output.mp4")
@@ -187,5 +278,11 @@ def run_dub(
             if not os.path.exists(dubbed_audio_path) or os.path.getsize(dubbed_audio_path) == 0:
                 raise RuntimeError("Dubbed audio file missing or empty")
             s3_utils.upload_file(dubbed_audio_path, out_key, content_type="audio/wav")
-        logger.info("DUB_MEDIA media_id=%s uploaded key=%s segments=%d", media_id, out_key, len(segments))
+        logger.info(
+            "DUB_PIPELINE %s done uploaded_key=%s segments=%d is_video=%s",
+            ctx,
+            out_key,
+            len(segments),
+            is_video,
+        )
         return out_key

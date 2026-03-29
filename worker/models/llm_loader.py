@@ -3,7 +3,10 @@ Phi-3-mini for casual/natural language rewrite. CPU only. Mandatory; no stub.
 """
 import logging
 import os
+import time
 from typing import Optional
+
+from worker.utils.job_logging import log_preview
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +68,8 @@ Sentence:
 Rewritten:"""
     logger.info("[llm] rewrite prompt:\n%s", prompt)
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024)
+    in_len = int(inputs["input_ids"].shape[1])
+    t0 = time.monotonic()
     with __import__("torch").no_grad():
         out = model.generate(
             **inputs,
@@ -74,6 +79,18 @@ Rewritten:"""
             top_p=0.9,
             pad_token_id=tokenizer.eos_token_id,
         )
+    gen_elapsed = time.monotonic() - t0
+    new_tokens = int(out.shape[1]) - in_len
     reply = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
     reply = reply.strip().split("\n")[0].strip()
+    logger.info(
+        "[llm] rewrite done: lang=%s target_syllables=%s in_tokens=%d new_tokens=%d elapsed_sec=%.2f "
+        "reply_preview=%r",
+        language,
+        target_syllables,
+        in_len,
+        max(0, new_tokens),
+        gen_elapsed,
+        log_preview(reply if reply else text, 160),
+    )
     return reply if reply else text
