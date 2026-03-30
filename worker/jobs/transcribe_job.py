@@ -33,3 +33,4 @@ def run_transcribe_job(job: dict) -> None:
         key = f"transcripts/{media_id}/original.json"
         s3_utils.upload_json(key, transcript)
         logger.info("TRANSCRIBE media_id=%s uploaded key=%s segments=%d", media_id, key, len(result.get("segments", [])))
+        return key

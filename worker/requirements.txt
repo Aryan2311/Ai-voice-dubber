@@ -2,6 +2,8 @@
 torch
 # Pin transformers: Coqui TTS/XTTS needs BeamSearchScorer (removed in 4.46+)
 transformers>=4.30,<4.46
+accelerate
+bitsandbytes
 sentencepiece
 sacremoses
 boto3

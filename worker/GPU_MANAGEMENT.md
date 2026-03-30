@@ -1,6 +1,7 @@
 # Worker GPU Management
 
 Single EC2 GPU worker: one heavy job at a time to avoid CUDA OOM and contention.
+Experimental translation/TTS overlap, when enabled, happens only inside a single dub job.
 
 ## Architecture
 
@@ -36,21 +37,23 @@ Delete SQS message
 | Job type             | GPU lock | Notes                          |
 |----------------------|----------|--------------------------------|
 | TRANSCRIBE           | Yes      | Whisper                        |
-| TRANSLATE_TRANSCRIPT | Yes      | MarianMT                       |
-| GENERATE_SUBTITLE    | No       | Format only (SRT/VTT from JSON)|
-| TEXT_TO_SPEECH       | Yes      | XTTS, optional RVC             |
-| DUB_MEDIA            | Yes      | Whisper, MarianMT, XTTS, RVC   |
+| TRANSLATE_TRANSCRIPT | Yes      | Mistral 7B translation         |
+| GENERATE_SUBTITLE    | Yes      | May trigger translation inline |
+| TEXT_TO_SPEECH       | Yes      | XTTS                           |
+| DUB_MEDIA            | Yes      | Whisper, Mistral, XTTS overlap |
 
 ## VRAM (example)
 
 - Whisper large: ~10 GB  
+- Mistral 7B 4-bit: several GB, workload-dependent  
 - XTTS: ~6 GB  
-- RVC: ~4 GB  
-- Total worst case: ~20 GB → keep **MAX_GPU_JOBS = 1** on 24 GB (e.g. A10G).
+- Overlap requires enough free VRAM after both XTTS and Mistral are resident.
+- The worker checks headroom explicitly and fails the overlap path if free VRAM is too low.
 
 ## Model loading and warmup
 
 - Models are loaded **once** in `load_models_once()` at startup.
+- XTTS and Mistral are preloaded together so the dub job can overlap batch translation and TTS.
 - Optional **warmup** (e.g. XTTS "hello") runs inside a `gpu_session()` after load to avoid first-inference delay.
 
 ## Safe execution
@@ -58,6 +61,7 @@ Delete SQS message
 - Every GPU job runs inside `with gpu_session(): ...`.
 - On exit, `torch.cuda.empty_cache()` is called and VRAM is logged.
 - Never run parallel GPU jobs unless VRAM is explicitly budgeted (e.g. multi-GPU later).
+- DUB overlap uses internal producer/consumer threads inside one GPU job; it does not allow two SQS jobs to run at once.
 
 ## Optional timeout
 

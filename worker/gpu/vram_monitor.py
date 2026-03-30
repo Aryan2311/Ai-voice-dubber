@@ -29,6 +29,21 @@ def get_vram_usage_mb():
     }
 
 
+def get_vram_free_total_mb():
+    """Return free/total VRAM in MB. Returns zeros if CUDA is not available."""
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            return {"free_mb": 0, "total_mb": 0}
+        free_bytes, total_bytes = torch.cuda.mem_get_info()
+        return {
+            "free_mb": round(free_bytes / (1024 ** 2), 2),
+            "total_mb": round(total_bytes / (1024 ** 2), 2),
+        }
+    except ImportError:
+        return {"free_mb": 0, "total_mb": 0}
+
+
 def has_enough_vram(max_allocated_bytes=None):
     """
     Optional: check before starting a GPU job.
@@ -43,4 +58,11 @@ def has_enough_vram(max_allocated_bytes=None):
 def log_vram():
     """Log current VRAM usage."""
     mb = get_vram_usage_mb()
-    logger.info("VRAM allocated=%s MB reserved=%s MB", mb["allocated_mb"], mb["reserved_mb"])
+    free_total = get_vram_free_total_mb()
+    logger.info(
+        "VRAM allocated=%s MB reserved=%s MB free=%s MB total=%s MB",
+        mb["allocated_mb"],
+        mb["reserved_mb"],
+        free_total["free_mb"],
+        free_total["total_mb"],
+    )

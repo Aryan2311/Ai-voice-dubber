@@ -57,9 +57,8 @@ def run_subtitle_job(job: dict) -> None:
     logger.info("GENERATE_SUBTITLE media_id=%s language=%s format=%s", media_id, language, fmt)
 
     transcript_key = f"transcripts/{media_id}/{language}.json"
-    if not s3_utils.object_exists(transcript_key):
-        logger.info("GENERATE_SUBTITLE media_id=%s running TRANSLATE first", media_id)
-        translate_job.run_translate_job({"job_type": "TRANSLATE_TRANSCRIPT", "media_id": media_id, "language": language})
+    logger.info("GENERATE_SUBTITLE media_id=%s running TRANSLATE inline before subtitle render", media_id)
+    translate_job.run_translate_job({"job_type": "TRANSLATE_TRANSCRIPT", "media_id": media_id, "language": language})
 
     with tempfile.TemporaryDirectory() as tmp:
         local_json = os.path.join(tmp, "transcript.json")
@@ -78,3 +77,4 @@ def run_subtitle_job(job: dict) -> None:
         key = f"subtitles/{media_id}/{language}.{fmt}"
         s3_utils.upload_bytes(content.encode("utf-8"), key, content_type=content_type)
         logger.info("GENERATE_SUBTITLE media_id=%s uploaded key=%s segments=%d", media_id, key, len(segments))
+        return key

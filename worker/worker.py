@@ -2,7 +2,8 @@
 EC2 GPU Worker: SQS → local queue → GPU scheduler → one job at a time.
 - Listener thread: receive SQS messages, enqueue (receipt_handle, job).
 - Processor thread: get job from queue; GPU jobs run inside gpu_session(), then delete SQS message.
-Job types: TRANSCRIBE, TRANSLATE_TRANSCRIPT, GENERATE_SUBTITLE (CPU), TEXT_TO_SPEECH, DUB_MEDIA.
+Job types: TRANSCRIBE, TRANSLATE_TRANSCRIPT, GENERATE_SUBTITLE, TEXT_TO_SPEECH, DUB_MEDIA.
+Experimental overlap, when enabled, happens inside one DUB_MEDIA job while the global GPU lock is held.
 """
 import json
 import os
@@ -17,6 +18,7 @@ from worker.jobs import transcribe_job, translate_job, subtitle_job, tts_job, du
 from worker.gpu import gpu_session
 from worker.scheduler import add_job, get_job
 from worker.utils import s3_utils
+from worker.utils import job_status as job_status_utils
 
 # Clear format for docker logs: UTC timestamp, level, name, message
 logging.Formatter.converter = time.gmtime
@@ -33,8 +35,14 @@ JOB_GENERATE_SUBTITLE = "GENERATE_SUBTITLE"
 JOB_TEXT_TO_SPEECH = "TEXT_TO_SPEECH"
 JOB_DUB_MEDIA = "DUB_MEDIA"
 
-# Only GENERATE_SUBTITLE is CPU-only (format SRT/VTT from JSON; translate dependency runs in same thread)
-GPU_JOB_TYPES = {JOB_TRANSCRIBE, JOB_TRANSLATE_TRANSCRIPT, JOB_TEXT_TO_SPEECH, JOB_DUB_MEDIA}
+# Subtitle generation may trigger translation inline, so keep it under the GPU lock too.
+GPU_JOB_TYPES = {
+    JOB_TRANSCRIBE,
+    JOB_TRANSLATE_TRANSCRIPT,
+    JOB_GENERATE_SUBTITLE,
+    JOB_TEXT_TO_SPEECH,
+    JOB_DUB_MEDIA,
+}
 
 
 def requires_gpu(job: dict) -> bool:
@@ -61,34 +69,31 @@ def get_queue_url():
 def handle_job(job: dict) -> None:
     job_type = job.get("job_type")
     if job_type == JOB_TRANSCRIBE:
-        transcribe_job.run_transcribe_job(job)
+        return transcribe_job.run_transcribe_job(job)
     elif job_type == JOB_TRANSLATE_TRANSCRIPT:
-        translate_job.run_translate_job(job)
+        return translate_job.run_translate_job(job)
     elif job_type == JOB_GENERATE_SUBTITLE:
-        subtitle_job.run_subtitle_job(job)
+        return subtitle_job.run_subtitle_job(job)
     elif job_type == JOB_TEXT_TO_SPEECH:
-        tts_job.run_tts_job(job)
+        return tts_job.run_tts_job(job)
     elif job_type == JOB_DUB_MEDIA:
-        dub_job.run_dub_job(job)
+        return dub_job.run_dub_job(job)
     else:
         raise ValueError("Unknown job_type: %s" % job_type)
 
 
 def load_models_once():
     logger.info("Loading AI models (once) at startup...")
-    try:
-        from worker.ai_models import whisper_model, xtts_model, rvc_model, translator
-        whisper_model.load_whisper()
-        logger.info("Whisper loaded.")
-        xtts_model.load_xtts()
-        logger.info("XTTS loaded.")
-        rvc_model.load_rvc()
-        logger.info("RVC loaded (or skipped).")
-        translator.load_translation_model("en", "es")
-        logger.info("Translator loaded.")
-        _warmup_models(whisper_model, xtts_model)
-    except Exception as e:
-        logger.warning("Some models failed to load: %s", e)
+    from worker.ai_models import whisper_model, xtts_model, translator
+
+    whisper_model.load_whisper()
+    logger.info("Whisper loaded.")
+    xtts_model.load_xtts()
+    logger.info("XTTS loaded.")
+    translator.load_translation_model()
+    logger.info("Translator loaded.")
+    translator.assert_overlap_ready(stage="startup")
+    _warmup_models(whisper_model, xtts_model)
     logger.info("Model loading done.")
 
 
@@ -145,12 +150,30 @@ def processor_loop(sqs, queue_url):
             job_id = job.get("job_id") or job.get("media_id") or job.get("request_id") or "—"
             started = time.monotonic()
             try:
+                if job.get("job_id"):
+                    existing_status = job_status_utils.read_job_status(job["job_id"])
+                    if existing_status and existing_status.get("status") in ("processing", "completed", "failed"):
+                        logger.info(
+                            "Skipping duplicate job_type=%s job_id=%s existing_status=%s",
+                            job_type,
+                            job_id,
+                            existing_status.get("status"),
+                        )
+                        continue
+                    job_status_utils.write_job_status(job["job_id"], "processing", job_type=job_type)
                 logger.info("Starting job_type=%s job_id=%s", job_type, job_id)
                 if requires_gpu(job):
                     with gpu_session():
-                        handle_job(job)
+                        result_s3_key = handle_job(job)
                 else:
-                    handle_job(job)
+                    result_s3_key = handle_job(job)
+                if job.get("job_id"):
+                    job_status_utils.write_job_status(
+                        job["job_id"],
+                        "completed",
+                        job_type=job_type,
+                        result_s3_key=result_s3_key,
+                    )
                 elapsed = time.monotonic() - started
                 logger.info("Completed job_type=%s job_id=%s elapsed_sec=%.1f", job_type, job_id, elapsed)
             except Exception as e:
@@ -160,6 +183,7 @@ def processor_loop(sqs, queue_url):
                 sid = job.get("job_id")
                 if sid:
                     try:
+                        job_status_utils.write_job_status(sid, "failed", job_type=job_type, error=str(e))
                         key = f"job_failures/{sid}.json"
                         s3_utils.upload_bytes(
                             json.dumps({"status": "failed", "error": str(e)}).encode("utf-8"),

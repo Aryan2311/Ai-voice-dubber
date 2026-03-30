@@ -8,6 +8,7 @@ import os
 
 from worker.utils import s3_utils
 from worker.ai_models import translator
+from worker.jobs import transcribe_job
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,8 @@ def run_translate_job(job: dict) -> None:
 
     original_key = f"transcripts/{media_id}/original.json"
     if not s3_utils.object_exists(original_key):
-        raise FileNotFoundError("Original transcript missing. Run TRANSCRIBE first: %s" % original_key)
+        logger.info("TRANSLATE_TRANSCRIPT media_id=%s original transcript missing; running TRANSCRIBE inline", media_id)
+        transcribe_job.run_transcribe_job({"job_type": "TRANSCRIBE", "media_id": media_id})
 
     with tempfile.TemporaryDirectory() as tmp:
         local_orig = os.path.join(tmp, "original.json")
@@ -41,3 +43,4 @@ def run_translate_job(job: dict) -> None:
         key = f"transcripts/{media_id}/{language}.json"
         s3_utils.upload_json(key, out)
         logger.info("TRANSLATE_TRANSCRIPT media_id=%s language=%s uploaded key=%s", media_id, language, key)
+        return key
