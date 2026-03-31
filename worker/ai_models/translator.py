@@ -50,6 +50,12 @@ _LANGUAGE_NAMES = {
 }
 
 
+def _log_translation_debug(batch_label: str, prompts: List[str], raw_outputs: List[str]) -> None:
+    for idx, (prompt, raw_output) in enumerate(zip(prompts, raw_outputs), start=1):
+        logger.info("MISTRAL prompt batch=%s item=%d:\n%s", batch_label, idx, prompt)
+        logger.info("MISTRAL raw_output batch=%s item=%d:\n%s", batch_label, idx, (raw_output or "").strip())
+
+
 def _language_name(language: str) -> str:
     code = (language or "").strip().lower()
     return _LANGUAGE_NAMES.get(code, code or "English")
@@ -215,7 +221,9 @@ def translate_text(text: str, source_lang: str = "en", target_lang: str = "es") 
 
     prompts = [_build_prompt(text, src, tgt)]
     max_new_tokens = max(64, min(256, len((text or "").strip()) * 2 + 32))
-    translated = _generate_translations(prompts, max_new_tokens=max_new_tokens)[0]
+    decoded = _generate_translations(prompts, max_new_tokens=max_new_tokens)
+    _log_translation_debug("single", prompts, decoded)
+    translated = decoded[0]
     return _clean_translation(translated) or (text or "")
 
 
@@ -247,6 +255,7 @@ def translate_batch(
     )
     t0 = time.monotonic()
     decoded = _generate_translations(prompts, max_new_tokens=max_new_tokens)
+    _log_translation_debug(label, prompts, decoded)
 
     result = []
     for seg, text in zip(segments, decoded):
