@@ -218,8 +218,16 @@ def rewrite_batch(
         too_short = len(cleaned) < max(5, len(original_trans) * 0.25)
         too_long = len(cleaned) > len(original_trans) * 3.5
         has_echo = bool(re.search(r"(?i)(English|Original|Source)\s*:", cleaned))
-        if too_short or too_long or not cleaned or has_echo:
-            reason = "echo" if has_echo else ("short" if too_short else ("long" if too_long else "empty"))
+        latin_chars = sum(1 for c in cleaned if c.isascii() and c.isalpha())
+        total_alpha = sum(1 for c in cleaned if c.isalpha())
+        mostly_latin = total_alpha > 0 and (latin_chars / total_alpha) > 0.5
+        if too_short or too_long or not cleaned or has_echo or mostly_latin:
+            reason = (
+                "latin" if mostly_latin else
+                "echo" if has_echo else
+                "short" if too_short else
+                "long" if too_long else "empty"
+            )
             logger.warning(
                 "REWRITER fallback item=%d reason=%s len_out=%d len_mt=%d",
                 i, reason, len(cleaned), len(original_trans),
