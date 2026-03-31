@@ -52,20 +52,21 @@ _COMPOUND_TAILS = frozenset(
     "deadlift deadlifts snatch snatches handstand headstand".split()
 )
 
-# ── Single English words STRONGLY preferred in spoken Hindi ───────────────
+# ── Single English words that are ALWAYS said in English in spoken Hindi ──
+# IMPORTANT: Only include words that are unambiguous and universally used as
+# English loanwords.  Do NOT include context-dependent words like "like"
+# (preference vs social-media), "follow" (instructions vs social-media),
+# "set" (configure vs exercise-set), "share" (divide vs social-media), etc.
+# Those are better handled by the colloquial table or the LLM rewriter.
 _SINGLE_PASSTHROUGH = frozenset(
-    # Social media — never translated in Hindi conversation
-    "subscribe like share comment post follow unfollow tag "
-    "story reel feed live stream trending viral content "
-    "creator influencer channel upload download update "
-    # Tech
-    "app website online offline video audio phone mobile laptop screen "
-    "notification email login logout password wifi bluetooth "
-    # Fitness / gym culture
-    "gym workout cardio training pushup pullup squat plank crunch "
+    # Social media — unambiguous terms
+    "subscribe channel "
+    # Tech — universally used as English in Hindi
+    "app website video phone mobile laptop wifi bluetooth email notification "
+    # Fitness — gym-culture terms that are never translated
+    "gym workout cardio pushup pullup squat plank crunch "
     "deadlift dumbbell barbell treadmill handstand headstand "
-    "beginner intermediate advanced yoga pilates crossfit hiit "
-    "rep reps set round routine "
+    "yoga pilates crossfit hiit "
     # Health
     "protein calories diet supplement"
     .split()
@@ -351,6 +352,7 @@ _FORMAL_TO_COLLOQUIAL_HI: List[Tuple[str, str]] = sorted(
         ("नौसिखिया", "बिगिनर"),
         ("पर्याप्त", "काफी"),
         ("संपूर्ण", "पूरा"),
+        ("वास्तव में", "सच में"),
         ("दूरभाष", "फोन"),
         ("संगणक", "कंप्यूटर"),
         ("अंतर्जाल", "इंटरनेट"),

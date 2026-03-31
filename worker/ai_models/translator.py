@@ -377,6 +377,11 @@ def _generate_translations(texts: List[str], source_lang: str, target_lang: str)
         for src_text, raw_text, pmap in zip(normalized_texts, raw_outputs, protected_maps)
     ]
     _log_translation_debug("postprocessed", src, tgt, normalized_texts, outputs)
+
+    from worker.ai_models.rewriter import rewrite_batch, REWRITER_ENABLED
+    if REWRITER_ENABLED:
+        outputs = rewrite_batch(normalized_texts, outputs, target_lang=tgt)
+
     return outputs
 
 

@@ -1,3 +1,3 @@
-from worker.ai_models import whisper_model, xtts_model, translator
+from worker.ai_models import whisper_model, xtts_model, translator, rewriter
 
-__all__ = ["whisper_model", "xtts_model", "translator"]
+__all__ = ["whisper_model", "xtts_model", "translator", "rewriter"]

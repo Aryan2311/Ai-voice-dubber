@@ -84,7 +84,7 @@ def handle_job(job: dict) -> None:
 
 def load_models_once():
     logger.info("Loading AI models (once) at startup...")
-    from worker.ai_models import whisper_model, xtts_model, translator
+    from worker.ai_models import whisper_model, xtts_model, translator, rewriter
 
     whisper_model.load_whisper()
     logger.info("Whisper loaded.")
@@ -92,6 +92,8 @@ def load_models_once():
     logger.info("XTTS loaded.")
     translator.load_translation_model()
     logger.info("Translator loaded. backend=%s", translator.ACTIVE_TRANSLATION_BACKEND)
+    rewriter.load_rewriter()
+    logger.info("Rewriter loaded. enabled=%s model=%s", rewriter.REWRITER_ENABLED, rewriter.REWRITER_MODEL_ID if rewriter.REWRITER_ENABLED else "none")
     translator.assert_overlap_ready(stage="startup")
     _warmup_models(whisper_model, xtts_model)
     logger.info("Model loading done.")
