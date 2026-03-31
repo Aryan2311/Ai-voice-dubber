@@ -113,30 +113,49 @@ def is_loaded() -> bool:
     return _rewriter_model is not None and _rewriter_tokenizer is not None
 
 
-def _build_prompt(english: str, translated: str, lang_name: str) -> str:
+_SYSTEM_PROMPT = (
+    "You improve Hindi subtitles. You MUST output in Devanagari script (हिंदी). "
+    "NEVER output in English or Latin script. No labels, no explanations."
+)
+
+
+def _build_prompt(translated: str, lang_name: str) -> str:
     return (
-        f"Rewrite the {lang_name} subtitle to sound natural and conversational — "
-        f"like how people actually talk in everyday {lang_name}.\n"
-        f"Keep English terms that {lang_name} speakers normally use as-is "
-        f"(like subscribe, video, gym, workout, etc).\n"
-        f"Don't add or remove any information.\n"
-        f"Return ONLY the improved {lang_name} text, nothing else.\n\n"
-        f"English: {english}\n"
-        f"{lang_name}: {translated}\n"
-        f"Rewrite:"
+        f"इस {lang_name} वाक्य को natural और conversational बनाओ — "
+        f"जैसे लोग रोज़मर्रा की {lang_name} में बात करते हैं।\n"
+        f"English loanwords जो {lang_name} में commonly use होते हैं वो रहने दो "
+        f"(जैसे subscribe, video, gym, workout वगैरह)।\n"
+        f"सिर्फ improved {lang_name} sentence output करो — और कुछ नहीं।\n\n"
+        f"{translated}"
     )
 
 
-def _clean_output(text: str) -> str:
-    """Strip common LLM artifacts."""
+def _clean_output(text: str, lang_name: str = "Hindi") -> str:
+    """Strip prompt echoes and common LLM artifacts from rewriter output."""
     text = (text or "").strip()
-    for prefix in ("Rewrite:", "Improved Hindi:", "Improved:", "Hindi:", "Output:"):
+
+    # If the model echoed the full prompt structure, extract the last target-language block.
+    # Pattern: "...Translation: <hindi>" or "...Hindi: <hindi>" — keep only what follows the last label.
+    for label in (f"{lang_name}:", "Translation:", "Rewrite:", "Improved:", "Output:"):
+        idx = text.rfind(label)
+        if idx >= 0:
+            text = text[idx + len(label):].strip()
+            break
+
+    # Strip any "Original: ..." or "English: ..." lines the model may have echoed
+    text = re.sub(r"(?i)^(Original|English|Source)\s*:.*$", "", text, flags=re.MULTILINE).strip()
+
+    # Remove standard LLM prefixes
+    for prefix in ("Rewrite:", f"Improved {lang_name}:", "Improved:", f"{lang_name}:", "Output:"):
         if text.lower().startswith(prefix.lower()):
             text = text[len(prefix):].strip()
+
+    # Remove wrapping quotes
     if text.startswith('"') and text.endswith('"') and len(text) >= 2:
         text = text[1:-1].strip()
     if text.startswith("'") and text.endswith("'") and len(text) >= 2:
         text = text[1:-1].strip()
+
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
@@ -162,8 +181,11 @@ def rewrite_batch(
     t0 = time.monotonic()
 
     prompts: List[str] = []
-    for eng, trans in zip(originals, translations):
-        messages = [{"role": "user", "content": _build_prompt(eng.strip(), trans.strip(), lang_name)}]
+    for trans in translations:
+        messages = [
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": _build_prompt(trans.strip(), lang_name)},
+        ]
         prompts.append(
             _rewriter_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         )
@@ -191,15 +213,16 @@ def rewrite_batch(
     for i, (gen_ids, original_trans) in enumerate(zip(output_ids, translations)):
         new_tokens = gen_ids[input_len:]
         decoded = _rewriter_tokenizer.decode(new_tokens, skip_special_tokens=True)
-        cleaned = _clean_output(decoded)
+        cleaned = _clean_output(decoded, lang_name)
 
         too_short = len(cleaned) < max(5, len(original_trans) * 0.25)
         too_long = len(cleaned) > len(original_trans) * 3.5
-        if too_short or too_long or not cleaned:
+        has_echo = bool(re.search(r"(?i)(English|Original|Source)\s*:", cleaned))
+        if too_short or too_long or not cleaned or has_echo:
+            reason = "echo" if has_echo else ("short" if too_short else ("long" if too_long else "empty"))
             logger.warning(
                 "REWRITER fallback item=%d reason=%s len_out=%d len_mt=%d",
-                i, "short" if too_short else ("long" if too_long else "empty"),
-                len(cleaned), len(original_trans),
+                i, reason, len(cleaned), len(original_trans),
             )
             results.append(original_trans)
         else:
