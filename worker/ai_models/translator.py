@@ -141,10 +141,7 @@ def _load_processor():
     global _translator_processor
     if _translator_processor is not None:
         return _translator_processor
-    try:
-        from IndicTransToolkit.processor import IndicProcessor
-    except ImportError:
-        from IndicTransToolkit import IndicProcessor
+    from IndicTransToolkit import IndicProcessor
     _translator_processor = IndicProcessor(inference=True)
     return _translator_processor
 

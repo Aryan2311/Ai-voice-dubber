@@ -7,7 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 # force-confdef/confold = use defaults for any config questions (no prompt)
 RUN apt-get update && apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
-    --no-install-recommends ffmpeg git \
+    --no-install-recommends ffmpeg git build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
