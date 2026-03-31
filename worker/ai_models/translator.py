@@ -80,6 +80,13 @@ _FLORES_TO_ISO = {value: key for key, value in _ISO_TO_FLORES.items()}
 _SUPPORTED_LANGUAGE_CODES = tuple(sorted(_ISO_TO_FLORES.keys()))
 
 
+def _hf_auth_kwargs() -> Dict[str, str]:
+    token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN")
+    if not token:
+        return {}
+    return {"use_auth_token": token}
+
+
 def _normalize_language_code(language: str) -> str:
     code = (language or "").strip()
     if not code:
@@ -191,19 +198,26 @@ def load_translation_model(route_key: str | None = None):
         _clear_loaded_model()
 
         model_id = _ACTIVE_MODEL_IDS[desired_route]
+        auth_kwargs = _hf_auth_kwargs()
         logger.info(
-            "TRANSLATION_MODEL backend=%s loading route=%s model_id=%s",
+            "TRANSLATION_MODEL backend=%s loading route=%s model_id=%s hf_auth=%s",
             ACTIVE_TRANSLATION_BACKEND,
             desired_route,
             model_id,
+            bool(auth_kwargs),
         )
         log_vram()
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_id,
+            trust_remote_code=True,
+            **auth_kwargs,
+        )
         model = AutoModelForSeq2SeqLM.from_pretrained(
             model_id,
             trust_remote_code=True,
             low_cpu_mem_usage=True,
+            **auth_kwargs,
         )
         if torch.cuda.is_available():
             model = model.to("cuda")
