@@ -323,13 +323,23 @@ def _generate_translations(texts: List[str], source_lang: str, target_lang: str)
     if route_key is None:
         return [text or "" for text in texts]
 
+    from worker.ai_models.translation_postprocess import protect_terms, postprocess
+
     tokenizer, model = load_translation_model(route_key)
     processor = _load_processor()
 
     import torch
 
     normalized_texts = [(text or "").strip() for text in texts]
-    prepared_batch = processor.preprocess_batch(normalized_texts, src_lang=src_flores, tgt_lang=tgt_flores)
+
+    protected_texts: List[str] = []
+    protected_maps: List[List[str]] = []
+    for text in normalized_texts:
+        pt, pm = protect_terms(text)
+        protected_texts.append(pt)
+        protected_maps.append(pm)
+
+    prepared_batch = processor.preprocess_batch(protected_texts, src_lang=src_flores, tgt_lang=tgt_flores)
     inputs = tokenizer(
         prepared_batch,
         truncation=True,
@@ -340,7 +350,7 @@ def _generate_translations(texts: List[str], source_lang: str, target_lang: str)
     model_device = next(model.parameters()).device
     inputs = {key: value.to(model_device) for key, value in inputs.items()}
 
-    max_chars = max((len(text) for text in normalized_texts), default=0)
+    max_chars = max((len(text) for text in protected_texts), default=0)
     max_length = max(64, min(256, max_chars * 3 + 32))
 
     with torch.no_grad():
@@ -359,8 +369,14 @@ def _generate_translations(texts: List[str], source_lang: str, target_lang: str)
         clean_up_tokenization_spaces=True,
     )
     translated = processor.postprocess_batch(decoded, lang=tgt_flores)
-    outputs = [_clean_indictrans_output(text) for text in translated]
-    _log_translation_debug("raw", src, tgt, normalized_texts, outputs)
+    raw_outputs = [_clean_indictrans_output(text) for text in translated]
+    _log_translation_debug("raw", src, tgt, normalized_texts, raw_outputs)
+
+    outputs = [
+        postprocess(src_text, raw_text, pmap, tgt)
+        for src_text, raw_text, pmap in zip(normalized_texts, raw_outputs, protected_maps)
+    ]
+    _log_translation_debug("postprocessed", src, tgt, normalized_texts, outputs)
     return outputs
 
 
