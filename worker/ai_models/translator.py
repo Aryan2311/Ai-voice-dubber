@@ -5,6 +5,7 @@ The model can stay resident alongside XTTS for experimental overlapped dubbing.
 """
 import logging
 import os
+import re
 import threading
 import time
 from typing import List, Dict, Any
@@ -58,6 +59,11 @@ def _clean_translation(text: str) -> str:
     text = (text or "").strip()
     if not text:
         return ""
+    # Remove any repeated instruction labels or inline source/translation scaffolding the model echoes back.
+    text = re.sub(r"(?is)\btext\s*:\s*.*?\btranslation\s*:\s*", "", text)
+    text = re.sub(r"(?i)\btranslated text\s*:\s*", "", text)
+    text = re.sub(r"(?i)\btranslation\s*:\s*", "", text)
+    text = re.sub(r"(?i)\btext\s*:\s*", "", text)
     for prefix in (
         "Translation:",
         "Translated text:",
@@ -66,6 +72,7 @@ def _clean_translation(text: str) -> str:
     ):
         if text.startswith(prefix):
             text = text[len(prefix):].strip()
+    text = re.sub(r"\s+", " ", text).strip()
     if text.startswith('"') and text.endswith('"') and len(text) >= 2:
         text = text[1:-1].strip()
     return text
@@ -73,10 +80,15 @@ def _clean_translation(text: str) -> str:
 
 def _build_prompt(text: str, source_lang: str, target_lang: str) -> str:
     return (
-        "You are a professional subtitle translator.\n"
+        "You are a professional subtitle translator for spoken video/audio.\n"
         f"Translate the subtitle text from {_language_name(source_lang)} to {_language_name(target_lang)}.\n"
-        "Return only the translated text.\n"
-        "Do not add explanations, notes, quotes, or labels.\n"
+        "Use natural, day-to-day conversational language that sounds like a real native speaker.\n"
+        "Avoid overly formal, literary, textbook, or awkward phrasing.\n"
+        "Return only the final translated subtitle text.\n"
+        "Do not add explanations, notes, quotes, labels, 'Text:', or 'Translation:'.\n"
+        "Do not repeat the source text.\n"
+        "Do not transliterate the target language into Latin script.\n"
+        "Keep the output fully in the target language script whenever possible.\n"
         "Preserve the meaning, tone, and punctuation.\n"
         "Keep names and numbers accurate.\n\n"
         f"Text:\n{text}"
