@@ -108,11 +108,12 @@ def run_dub_job(job: dict) -> None:
             slot_starts.append(start_sec)
             slot_ends.append(end_sec)
 
-        translator.assert_overlap_ready(stage="dub_job")
+        translator.assert_overlap_ready(stage="dub_job", source_lang=source_lang, target_lang=language)
         n_seg = len(segments)
         total_batches = max(1, (n_seg + OVERLAP_BATCH_SIZE - 1) // OVERLAP_BATCH_SIZE)
         logger.info(
-            "DUB_OVERLAP enabled=true media_id=%s language=%s batch_size=%d queue_size=%d total_segments=%d total_batches=%d overlap_window_possible=%s",
+            "DUB_OVERLAP enabled=true translation_backend=%s media_id=%s language=%s batch_size=%d queue_size=%d total_segments=%d total_batches=%d overlap_window_possible=%s",
+            translator.ACTIVE_TRANSLATION_BACKEND,
             media_id,
             language,
             OVERLAP_BATCH_SIZE,

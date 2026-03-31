@@ -6,6 +6,7 @@ accelerate
 bitsandbytes
 sentencepiece
 sacremoses
+indictrans2-ai4bharat
 boto3
 ffmpeg-python
 TTS

@@ -91,7 +91,7 @@ def load_models_once():
     xtts_model.load_xtts()
     logger.info("XTTS loaded.")
     translator.load_translation_model()
-    logger.info("Translator loaded.")
+    logger.info("Translator loaded. backend=%s", translator.ACTIVE_TRANSLATION_BACKEND)
     translator.assert_overlap_ready(stage="startup")
     _warmup_models(whisper_model, xtts_model)
     logger.info("Model loading done.")
